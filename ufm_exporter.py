@@ -17,6 +17,7 @@ UFM IB Exporter —— 通过 UFM REST 监控 InfiniBand 计算网 ConnectX-8(XD
 """
 
 import os
+import re
 import time
 import logging
 import threading
@@ -44,6 +45,7 @@ NODE_PREFIX = os.getenv("UFM_NODE_PREFIX", "B300")
 EXPECTED_NODES = int(os.getenv("UFM_EXPECTED_NODES", "32"))
 PORTS_PER_NODE = int(os.getenv("UFM_PORTS_PER_NODE", "8"))
 PORTS_PATH  = "/ufmRest/resources/ports"
+_NODE_RE = re.compile(re.escape(NODE_PREFIX) + r"-\d+")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ufm-exporter")
@@ -62,18 +64,28 @@ def fetch_ports():
 
 
 def parse_host_ports(ports):
-    """挑出 B300 主机 CA 端口,返回 [(node, card, peer, cage, speed, up)]。
-    UFM REST 字段: node_description='B300-10:ibB102…'(冒号前=主机名),
-    peer_node_name='Q3400-CL-01', peer_port_dname='sw20p1'(交换机 cage),
-    active_speed='XDR', logical_state='Active'/'Down'(=4 Active 才算 up)。"""
+    """挑出 B300 主机的物理 CX8 端口(每节点 8 块,800G OSFP),返回 [(node, card, peer, cage, speed, up)]。
+
+    UFM /resources/ports 的两个坑(都踩过):
+      1) 一块 800G CX8 = 4 个 plane(4×200G XDR),该接口把 plane 子口和物理聚合口都列出来 →
+         只数物理聚合口 `has_plane_ports == True`,否则 plane 让每节点翻 4 倍。
+      2) node_description 有两种写法:'B300-10:ibB…'(已纳管,带 peer/cage)和
+         'B300-10 mlx5_8'(对端交换机调试中,peer=N/A)—— 用正则取节点名,两种都认。
+         (旧实现只认带冒号的,把 mlx5_X 那种全漏了,导致每节点只数到一半。)
+
+    注:UFM 能看到的物理口实测都是 Active(up==总数);某节点 <8 多半是该口对端(如 CL-02)
+    还在调试、UFM 尚未完全发现,并非真 down。
+    """
     out = []
     for p in ports:
+        if p.get("has_plane_ports") is not True:      # 只要物理聚合口,排除 plane 子口
+            continue
         nd = p.get("node_description") or ""
-        if ":" not in nd:
+        m = _NODE_RE.match(nd)
+        if not m:
             continue
-        node, _, card = nd.partition(":")
-        if not node.startswith(NODE_PREFIX):
-            continue
+        node = m.group(0)
+        card = nd[len(node):].lstrip(": ").strip() or "?"
         peer  = str(p.get("peer_node_name") or "")
         cage  = str(p.get("peer_port_dname") or "")
         speed = str(p.get("active_speed") or "")
