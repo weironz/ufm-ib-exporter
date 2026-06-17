@@ -47,7 +47,7 @@
       "gridPos": { "h": 12, "w": 12, "x": 0, "y": 6 },
       "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false }, "sortBy": [ { "displayName": "在线", "desc": false } ] },
       "fieldConfig": { "defaults": { "custom": { "align": "center" } }, "overrides": [
-        { "matcher": { "id": "byName", "options": "在线" }, "properties": [ { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 8 } ] } }, { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+        { "matcher": { "id": "byName", "options": "在线" }, "properties": [ { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 8 } ] } }, { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
       ] },
       "targets": [
         { "refId": "A", "expr": "ufm_ib_node_links_up", "instant": true, "format": "table" },
@@ -59,8 +59,8 @@
       ] },
     { "id": 21, "type": "bargauge", "title": "每节点 up 链路", "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 12, "w": 12, "x": 12, "y": 6 },
-      "fieldConfig": { "defaults": { "unit": "none", "min": 0, "max": 8, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 7 }, { "color": "green", "value": 8 } ] } }, "overrides": [] },
-      "options": { "orientation": "horizontal", "displayMode": "lcd", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "none", "min": 0, "max": 8, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 8 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [ { "refId": "A", "expr": "ufm_ib_node_links_up", "instant": true, "legendFormat": "{{node}}" } ] },
 
     { "id": 3, "type": "row", "title": "🔴  down 链路明细 (UFM 中仍可见的 down 口)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }, "collapsed": false },
