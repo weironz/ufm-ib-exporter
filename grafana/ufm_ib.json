@@ -1,0 +1,91 @@
+{
+  "uid": "ufm-ib",
+  "title": "IB 计算网 / ConnectX-8 链路 (UFM)",
+  "tags": ["infiniband", "ufm", "cx8"],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "1m",
+  "annotations": { "list": [] },
+  "panels": [
+    { "id": 1, "type": "row", "title": "📊  总览", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false },
+
+    { "id": 10, "type": "stat", "title": "全网在线率", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 90 }, { "color": "green", "value": 99.9 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_links_up / ufm_ib_links_expected * 100", "instant": true } ] },
+    { "id": 11, "type": "stat", "title": "在线链路", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "none", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_links_up", "instant": true } ] },
+    { "id": 12, "type": "stat", "title": "未在线 (down/缺失)", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "none", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_links_missing", "instant": true } ] },
+    { "id": 13, "type": "stat", "title": "应在线 (基线)", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "none", "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_links_expected", "instant": true } ] },
+    { "id": 14, "type": "stat", "title": "UFM 采集", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "1": { "text": "正常", "color": "green", "index": 1 }, "0": { "text": "失联", "color": "red", "index": 0 } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [ { "refId": "A", "expr": "ufm_up", "instant": true } ] },
+    { "id": 15, "type": "stat", "title": "数据年龄", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 120 }, { "color": "red", "value": 300 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [ { "refId": "A", "expr": "ufm_data_age_seconds", "instant": true } ] },
+
+    { "id": 2, "type": "row", "title": "🖥  每节点链路 (基线 8)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "collapsed": false },
+    { "id": 20, "type": "table", "title": "每节点 up / 可见端口", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 6 },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false }, "sortBy": [ { "displayName": "在线", "desc": false } ] },
+      "fieldConfig": { "defaults": { "custom": { "align": "center" } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "在线" }, "properties": [ { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 8 } ] } }, { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+      ] },
+      "targets": [
+        { "refId": "A", "expr": "ufm_ib_node_links_up", "instant": true, "format": "table" },
+        { "refId": "B", "expr": "ufm_ib_node_links_total", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "job": true, "fleet": true, "instance": true }, "renameByName": { "node": "节点", "Value #A": "在线", "Value #B": "可见端口" }, "indexByName": { "node": 0, "Value #A": 1, "Value #B": 2 } } }
+      ] },
+    { "id": 21, "type": "bargauge", "title": "每节点 up 链路", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "none", "min": 0, "max": 8, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 7 }, { "color": "green", "value": 8 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "lcd", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_node_links_up", "instant": true, "legendFormat": "{{node}}" } ] },
+
+    { "id": 3, "type": "row", "title": "🔴  down 链路明细 (UFM 中仍可见的 down 口)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }, "collapsed": false },
+    { "id": 30, "type": "table", "title": "down 链路 (logical_state ≠ Active)", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": { "defaults": { "custom": { "align": "center" } }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_link_up == 0", "instant": true, "format": "table" } ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "Value": true, "job": true, "fleet": true, "instance": true }, "renameByName": { "node": "节点", "card": "卡/端口", "peer": "对端交换机", "cage": "Cage", "speed": "速率" }, "indexByName": { "node": 0, "card": 1, "peer": 2, "cage": 3, "speed": 4 } } }
+      ] },
+
+    { "id": 4, "type": "row", "title": "📈  趋势", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }, "collapsed": false },
+    { "id": 40, "type": "timeseries", "title": "在线 vs 应在线", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "drawStyle": "line", "lineWidth": 2, "showPoints": "never", "fillOpacity": 5 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "ufm_ib_links_up", "legendFormat": "在线" },
+        { "refId": "B", "expr": "ufm_ib_links_expected", "legendFormat": "应在线" }
+      ] },
+    { "id": 41, "type": "timeseries", "title": "每节点 up 趋势", "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "none", "min": 0, "max": 8, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 1, "showPoints": "never", "fillOpacity": 0 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }, "tooltip": { "mode": "multi", "sort": "asc" } },
+      "targets": [ { "refId": "A", "expr": "ufm_ib_node_links_up", "legendFormat": "{{node}}" } ] }
+  ]
+}

@@ -76,6 +76,11 @@ UFM_HOST=172.16.30.33 UFM_USERNAME=admin UFM_PASSWORD=*** python ufm_exporter.py
 - 与既有监控栈**同一 docker 网络**:target 用容器名 `ufm-ib-exporter:9627`(见 `docker-compose.yml` 里 networks 注释)。
 - **独立运行**:target 用 `<宿主IP>:9627`。
 
+## Grafana 大盘
+
+[`grafana/ufm_ib.json`](grafana/ufm_ib.json) —— 全网在线率 / 每节点 up(基线8,<8 标红)/ down 明细(带 peer·cage 定位)/ 趋势,数据源 uid 用 `prometheus`。
+provisioning 部署:拷进 Grafana 的 `provisioning/dashboards/<folder>/` 并加一个 file provider,然后 **`docker compose restart grafana`**(provisioned 大盘改文件不会热加载,必须重启 grafana)。
+
 ## License
 
 内部使用。
