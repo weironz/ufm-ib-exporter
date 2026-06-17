@@ -1,0 +1,16 @@
+# 把这个 job 加进你的 prometheus.yml 的 scrape_configs 下。
+# 同时把 examples/alerts.yml 放进 Prometheus 的 rule_files 目录。
+#
+# target 写法二选一:
+#   - 同一个 docker 网络:用容器名     ufm-ib-exporter:9627
+#   - 独立运行 / 跨网络:用宿主 IP:端口  <宿主IP>:9627
+#
+# 指标体量很小(几千 series),60s 足够。
+
+scrape_configs:
+  - job_name: 'ufm-ib'
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: ['ufm-ib-exporter:9627']   # 或 '<宿主IP>:9627'
+        labels: { fleet: b300 }

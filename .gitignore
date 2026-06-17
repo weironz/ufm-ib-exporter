@@ -1,0 +1,9 @@
+# 凭据 / 本地配置
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# 运行时
+*.log
