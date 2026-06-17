@@ -1,7 +1,7 @@
 services:
   ufm-ib-exporter:
     build: .
-    image: ${IMAGE:-ufm-ib-exporter:latest}
+    image: ${IMAGE:-willdockerhub/ufm-ib-exporter:latest}
     container_name: ufm-ib-exporter
     environment:
       UFM_HOST: "${UFM_HOST:-172.16.30.33}"
