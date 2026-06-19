@@ -74,6 +74,9 @@ curl -sk -u admin:123456 https://172.16.30.33/ufmRest/app/ufm_version   # 200 + 
 curl -sk -u admin:123456 https://172.16.30.33/ufmRest/resources/ports | head -c 200
 ```
 
+> ✅ **REST 走 UFM GUI 的 443 端口(开箱即暴露),当前方案无需改 UFM 监听地址。**
+> 只有走 Telemetry(方案 B)才需要在 UFM 上放开 `:9001/:9002` 的监听地址 —— 详见 **附录 A**。
+
 ### 4.2 Exporter(`ufm_exporter.py`)
 
 轮询 `/ufmRest/resources/ports`,导出 Prometheus 指标。环境变量:
@@ -201,3 +204,51 @@ UFM 尚未完全发现,**不是断链**,稳定后会补到 8。
   `node_guid`/`aggregated_port`/`plane` 字段为空,`name`=`<port_guid>_<plane>`。
 - 掉线口从 UFM 消失(非 Down)→ 必须对所有应在册节点强制补 0,靠 `node_links_up<8` 兜底。
 - 改 provisioned Grafana 大盘文件后要 `restart grafana`,不是 reload。
+
+---
+
+## 附录 A:启用 UFM Telemetry 监听地址(**仅方案 B 需要**)
+
+> ⚠️ 当前选定的 **REST 方案走 443,不需要本节**。本节仅当将来要走 Telemetry(方案 B,取计数器/BER)时才做 —— 我们已在 2026-06-17 实操过一次。
+
+UFM Telemetry 的两个 Prometheus 端点(`ibdiagnet` 进程)默认**只绑 `127.0.0.1`**,外部连不上,必须在 `gv.cfg` 放开监听地址。
+
+**1. 现状确认**(在 UFM 主机上,本案为裸装 Ubuntu 24.04、无 Docker):
+```bash
+sudo ss -tlnp | grep -E ':900[12]'      # 看到 127.0.0.1:9001 / 127.0.0.1:9002 = 只绑本机
+```
+
+**2. 改绑定地址** —— 编辑生效配置 `/opt/ufm/files/conf/gv.cfg`(不是 `.org` 模板)的 `[Telemetry]` 段:
+
+| 配置项 | 默认 | 改成 | 控制 |
+|---|---|---|---|
+| `primary_ip_bind_addr` | `127.0.0.1` | `172.16.30.33`(或 `0.0.0.0`) | `:9001`(计数器) |
+| `secondary_ip_bind_addr` | `127.0.0.1` | `172.16.30.33`(或 `0.0.0.0`) | `:9002`(富数据) |
+
+> 绑管理口 IP `172.16.30.33` 比 `0.0.0.0` 更紧(只暴露在管理网;**端点无鉴权**)。
+
+一键 sed(先备份):
+```bash
+sudo cp -a /opt/ufm/files/conf/gv.cfg /opt/ufm/files/conf/gv.cfg.bak
+sudo sed -i -E 's/^(primary_ip_bind_addr[[:space:]]*=[[:space:]]*)127\.0\.0\.1/\1172.16.30.33/; \
+                s/^(secondary_ip_bind_addr[[:space:]]*=[[:space:]]*)127\.0\.0\.1/\1172.16.30.33/' \
+  /opt/ufm/files/conf/gv.cfg
+sudo grep -nE 'primary_ip_bind_addr|secondary_ip_bind_addr' /opt/ufm/files/conf/gv.cfg   # 确认改对
+```
+
+**3. 生效**(先试最轻的):
+```bash
+# gv.cfg 有 ~120s 改动监听器,先等它自动重绑:
+sleep 120; sudo ss -tlnp | grep -E ':900[12]'        # 期望 172.16.30.33:9001 / :9002
+# 若仍是 127.0.0.1,再重启 UFM(生产操作:SM 短暂重启,运行中 IB 流量不受影响,建议维护窗口):
+sudo systemctl restart ufm-enterprise                 # = /etc/init.d/ufmd start
+```
+
+**4. 验证可达**(从将来跑 Prometheus 的主机):
+```bash
+curl -s http://172.16.30.33:9001/metrics | head -3    # 看到 # TYPE 即通
+```
+
+> ⚠️ 即便开了端口:`:9001`=158MB、`:9002`=1.26GB 是火管,**别让 Prometheus 直接抓**,
+> 驯服办法见 §2.2(慢抓 :9001 + 白名单 / UFM 本机裁剪 exporter)。
+> 另:UFM Telemetry 服务在跑(`telemetry 1.25.x`),`/metrics`=Prometheus 格式、`/csv/metrics`=CSV。
