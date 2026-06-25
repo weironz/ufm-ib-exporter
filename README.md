@@ -8,7 +8,7 @@
 ## 为什么走 UFM,而不是 BMC
 
 - **BMC 带外读 IB 链路不可靠(假阴性)**:实测 BMC 经 NC-SI/MCTP sideband 会把主机侧 **ACTIVE 800G** 的口误报成 `Disabled/LinkDown`,且各节点端口数不一致。UFM 是该 fabric 的 SM,链路状态由它说了算。
-- **为什么用 REST `/resources/ports`,而不是 UFM telemetry `/metrics`**:UFM telemetry 端点单次是 **158MB(:9001)/ 1.26GB(:9002)** 的"火管",直接喂 Prometheus 会打爆(且 `metric_relabel` 是先全量下载+解析再 drop,省存储但不省传输/解析)。REST `/resources/ports` 是**小 JSON**,正好够 up/down。富计数器/BER 趋势是另一回事(可在 UFM 本机做裁剪采集),不在本 exporter 范围。
+- **为什么用 REST `/resources/ports`,而不是 UFM telemetry `/metrics`**:UFM telemetry 端点单次是 **158MB(:9001)/ 1.26GB(:9002)** 的"火管",直接喂 Prometheus 会打爆(且 `metric_relabel` 是先全量下载+解析再 drop,省存储但不省传输/解析)。REST `/resources/ports` 是**小 JSON**,正好够 up/down。富计数器/BER 趋势可**选启用为源 2/源 3**:在 UFM 本机读 loopback 流式裁剪后小体积暴露,见下文 [Telemetry 采集](#telemetry-采集90019002可选--误码闪断ber)。
 
 ## 关键设计:掉线口会"消失"
 
@@ -67,6 +67,38 @@ UFM_HOST=172.16.30.33 UFM_USERNAME=admin UFM_PASSWORD=*** python ufm_exporter.py
 | `UFM_NODE_PREFIX` | B300 | 只采该前缀的主机 CA 端口(交换机口自动排除) |
 | `UFM_EXPECTED_NODES` | 32 | 应在册节点数(`B300-1..N`),用于整节点消失检测 |
 | `UFM_PORTS_PER_NODE` | 8 | 每节点 CX8 端口基线 |
+
+## Telemetry 采集(:9001/:9002,可选)— 误码/闪断/BER
+
+REST 只给 up/down。**链路劣化**(误码、闪断、FEC/BER 趋势)在 UFM telemetry 端点:`:9001`(counters,158MB)、`:9002`(rich+光学,1.26GB),**默认只绑 loopback**。本 exporter 可作第 2/3 源,把它们**在 UFM 本机读取 → 流式裁剪 → 小体积暴露**给 Prometheus(158MB 解析留在本地,过网仅十几 MB)。指标行的显式毫秒时间戳会被剥除,让 Prometheus 用 scrape 时间(避免缓存数据带旧时间戳被拒)。
+
+三源各自独立启停 / 传参(详见 `.env.example`):
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `UFM_COLLECT_REST` | true | 源1 · REST up/down |
+| `UFM_COLLECT_9001` | false | 源2 · :9001 IB 错误计数 + PHY 误码 + FEC |
+| `UFM_9001_URL` | `http://127.0.0.1:9001/metrics` | 同机用 loopback,异机填 mgmt IP |
+| `UFM_9001_INTERVAL` | 180 | 后台拉取间隔(秒),BER 慢变量 |
+| `UFM_9001_NODE_FILTER` | — | `node_description` 正则,空=全收(如 `B300\|Q3400`) |
+| `UFM_9001_KEEP` | — | 指标名白名单正则,空=代码默认 |
+| `UFM_COLLECT_9002` / `UFM_9002_*` | false | 源3 · :9002 光功率/温度,同上(慎用 1.26GB) |
+
+新增元指标:`ufm_telemetry_up{source}` · `_scrape_error{source}` · `_data_age_seconds{source}` · `_series{source}` · `_poll_seconds{source}`。
+
+### 在 UFM 本机部署(docker compose)
+
+见 [`docker-compose.ufm.yml`](docker-compose.ufm.yml):`network_mode: host`(读宿主 `127.0.0.1:9001` + 直接在 mgmt IP 暴露)。**UFM 通常在隔离管理网、无外网**,无法 build/pull,故复用已 load 的镜像(仅取 python+依赖)+ **挂载脚本**覆盖:
+
+```bash
+# 在有外网的机器(如 bastion)上把镜像送到 UFM(免 UFM 联网)
+docker save willdockerhub/ufm-ib-exporter:<tag> | ssh <UFM> 'docker load'
+# UFM 上(脚本走挂载,改脚本只需 restart,不重 build)
+docker compose -f docker-compose.ufm.yml up -d
+curl -s localhost:9628/metrics | grep ufm_telemetry_
+```
+
+Prometheus 用 `<UFM_mgmt_IP>:9628` 抓(本仓 b300 栈已加 `ufm-ib-telemetry` job);Grafana 见 [`grafana/ufm_ib_quality.json`](grafana/ufm_ib_quality.json)(闪断 Top / symbol err / FEC→BER 趋势)。
 
 ## 接入 Prometheus
 
