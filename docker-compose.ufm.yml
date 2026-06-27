@@ -23,4 +23,10 @@ services:
       UFM_9001_INTERVAL: "180"               # BER 慢变量,180s 足够
       UFM_9001_NODE_FILTER: "B300|Q3400"     # 只留 B300 主机 + Q3400 交换机端口;空=全收
       UFM_COLLECT_9002: "false"              # 富/光学 1.26GB,默认关
+    healthcheck:                             # 进程卡死/HTTP 不回时标 unhealthy(host 网络下 localhost:9628=宿主;镜像自带 python)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9628/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
