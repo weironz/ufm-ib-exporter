@@ -22,7 +22,11 @@ services:
       UFM_9001_URL: "http://127.0.0.1:9001/metrics"
       UFM_9001_INTERVAL: "180"               # BER 慢变量,180s 足够
       UFM_9001_NODE_FILTER: "B300|Q3400"     # 只留 B300 主机 + Q3400 交换机端口;空=全收
-      UFM_COLLECT_9002: "false"              # 富/光学 1.26GB,默认关
+      UFM_COLLECT_9002: "true"               # 光层(光功率/模块温度)前瞻预警;白名单收紧后约 46k series
+      UFM_9002_URL: "http://127.0.0.1:9002/metrics"
+      UFM_9002_INTERVAL: "300"               # 光功率/温度慢变量,300s;实测全量流式裁剪 ~7-15s,几乎不压 UFM
+      UFM_9002_NODE_FILTER: ""               # 留空不过滤:rx/tx_power 来自 cable_info 表(标签 Port_Name/PN/SN,无 node_description),且本 fabric 全 B300/Q3400,无需过滤;KEEP 白名单已限基数
+      UFM_9002_KEEP: "^(rx_power_lane[0-7]|tx_power_lane[0-7]|dev_temperature)$"   # 8lane Rx+Tx 光功率 + 模块温度
     healthcheck:                             # 进程卡死/HTTP 不回时标 unhealthy(host 网络下 localhost:9628=宿主;镜像自带 python)
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9628/healthz', timeout=5)"]
       interval: 30s

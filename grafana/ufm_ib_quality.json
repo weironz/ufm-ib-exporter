@@ -1,59 +1,852 @@
 {
   "uid": "ufm-ib-quality",
   "title": "IB 光链路质量 (UFM telemetry)",
-  "tags": ["ib", "ufm", "telemetry"],
+  "tags": [
+    "ib",
+    "ufm",
+    "telemetry"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "1m",
-  "time": { "from": "now-6h", "to": "now" },
-  "templating": { "list": [] },
-  "annotations": { "list": [] },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
-    { "type": "row", "title": "IB 光链路质量 (UFM telemetry :9001 → 误码/闪断/FEC)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 1 },
-
-    { "type": "stat", "title": "近1h 闪断口数", "id": 2, "gridPos": { "h": 4, "w": 5, "x": 0, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "count(increase(LinkDownedCounterExtended[1h]) > 0) or vector(0)" } ],
-      "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 } ] } } },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } } },
-
-    { "type": "stat", "title": "近1h 有 symbol error 的口数", "id": 3, "gridPos": { "h": 4, "w": 5, "x": 5, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "count(increase(SymbolErrorCounterExtended[1h]) > 0) or vector(0)" } ],
-      "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 } ] } } },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } } },
-
-    { "type": "stat", "title": "telemetry 采集", "id": 4, "gridPos": { "h": 4, "w": 5, "x": 10, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "ufm_telemetry_up{source=\"9001\"}" } ],
-      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "1": { "text": "正常", "color": "green" }, "0": { "text": "断", "color": "red" } } } ] } },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } } },
-
-    { "type": "stat", "title": "数据年龄(秒)", "id": 5, "gridPos": { "h": 4, "w": 4, "x": 15, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "ufm_telemetry_data_age_seconds{source=\"9001\"}" } ],
-      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 240 }, { "color": "red", "value": 600 } ] } } },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } } },
-
-    { "type": "stat", "title": "监控端口总数", "id": 6, "gridPos": { "h": 4, "w": 5, "x": 19, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "count(LinkDownedCounterExtended)" } ],
-      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } } },
-
-    { "type": "table", "title": "闪断 Top25(近1h LinkDowned 增量)", "id": 7, "gridPos": { "h": 10, "w": 12, "x": 0, "y": 5 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "topk(25, increase(LinkDownedCounterExtended[1h]))", "instant": true, "format": "table" } ],
-      "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true, "source": true, "node_guid": true, "port_guid": true, "sys_image_guid": true, "port_type": true, "aport": true, "__name__": true, "job": true, "fleet": true, "instance": true }, "renameByName": { "host_name": "节点", "m_label": "端口", "node_description": "描述", "port_num": "port", "Value": "近1h闪断" } } } ] },
-
-    { "type": "table", "title": "Symbol Error Top25(近1h 增量)", "id": 8, "gridPos": { "h": 10, "w": 12, "x": 12, "y": 5 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "topk(25, increase(SymbolErrorCounterExtended[1h]))", "instant": true, "format": "table" } ],
-      "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true, "source": true, "node_guid": true, "port_guid": true, "sys_image_guid": true, "port_type": true, "aport": true, "__name__": true, "job": true, "fleet": true, "instance": true }, "renameByName": { "host_name": "节点", "m_label": "端口", "port_num": "port", "Value": "近1h symbol err" } } } ] },
-
-    { "type": "timeseries", "title": "FEC 纠错率(BER 代理,Top10 口) — 上升=光链路劣化", "id": 9, "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [ { "refId": "A", "expr": "topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[5m]))", "legendFormat": "{{host_name}} {{m_label}}" } ],
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "lastNotNull"] } } }
-  ]
+    {
+      "type": "row",
+      "title": "IB 光链路质量 (UFM telemetry :9001 → 误码/闪断/FEC)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "近1h 闪断口数",
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(increase(LinkDownedCounterExtended[1h]) > 0) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "近1h 有 symbol error 的口数",
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 5,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(increase(SymbolErrorCounterExtended[1h]) > 0) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "telemetry 采集",
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 10,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ufm_telemetry_up{source=\"9001\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "正常",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "断",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "数据年龄(秒)",
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 15,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ufm_telemetry_data_age_seconds{source=\"9001\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 240
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "监控端口总数",
+      "id": 6,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(LinkDownedCounterExtended)"
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "闪断 Top25(近1h LinkDowned 增量)",
+      "id": 7,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(25, increase(LinkDownedCounterExtended[1h]))",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "source": true,
+              "node_guid": true,
+              "port_guid": true,
+              "sys_image_guid": true,
+              "port_type": true,
+              "aport": true,
+              "__name__": true,
+              "job": true,
+              "fleet": true,
+              "instance": true
+            },
+            "renameByName": {
+              "host_name": "节点",
+              "m_label": "端口",
+              "node_description": "描述",
+              "port_num": "port",
+              "Value": "近1h闪断"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Symbol Error Top25(近1h 增量)",
+      "id": 8,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(25, increase(SymbolErrorCounterExtended[1h]))",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "source": true,
+              "node_guid": true,
+              "port_guid": true,
+              "sys_image_guid": true,
+              "port_type": true,
+              "aport": true,
+              "__name__": true,
+              "job": true,
+              "fleet": true,
+              "instance": true
+            },
+            "renameByName": {
+              "host_name": "节点",
+              "m_label": "端口",
+              "port_num": "port",
+              "Value": "近1h symbol err"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "FEC 纠错率(BER 代理,Top10 口) — 上升=光链路劣化",
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[5m]))",
+          "legendFormat": "{{host_name}} {{m_label}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "光层 (:9002 光功率/温度)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Rx 光功率最低 Top20 (在用口, mW)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "bottomk(20, optic:rx_power_min > 0.1)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "source": true,
+              "sys_image_guid": true,
+              "port_type": true,
+              "aport": true,
+              "fleet": true,
+              "tag": true,
+              "Port": true,
+              "Rev": true,
+              "length": true,
+              "cable_identifier": true,
+              "host_name": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "Port_Name": "端口",
+              "PN": "料号",
+              "SN": "序列号",
+              "Value": "Rx光功率(mW)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true,
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rx光功率(mW)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.6
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Rx光功率(mW)",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Tx 光功率最低 Top20 (在用口, mW)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "bottomk(20, optic:tx_power_min > 0.1)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "source": true,
+              "sys_image_guid": true,
+              "port_type": true,
+              "aport": true,
+              "fleet": true,
+              "tag": true,
+              "Port": true,
+              "Rev": true,
+              "length": true,
+              "cable_identifier": true,
+              "host_name": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "Port_Name": "端口",
+              "PN": "料号",
+              "SN": "序列号",
+              "Value": "Tx光功率(mW)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true,
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tx光功率(mW)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.6
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Tx光功率(mW)",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "模块温度最高 Top20 (℃)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(20, dev_temperature > 5)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "source": true,
+              "sys_image_guid": true,
+              "port_type": true,
+              "aport": true,
+              "fleet": true,
+              "tag": true,
+              "Port": true,
+              "Rev": true,
+              "length": true,
+              "cable_identifier": true,
+              "host_name": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "node_description": "端口",
+              "link_partner_description": "对端",
+              "port_num": "port",
+              "Value": "温度(℃)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true,
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "温度(℃)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 75
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "温度(℃)",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "在用口 Rx 光功率分布趋势 (mW)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min(optic:rx_power_min > 0.1)",
+          "legendFormat": "最低"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg(optic:rx_power_min > 0.1)",
+          "legendFormat": "平均"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "quantile(0.05, optic:rx_power_min > 0.1)",
+          "legendFormat": "5% 弱尾"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "unit": "none",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    }
+  ],
+  "version": 2
 }
