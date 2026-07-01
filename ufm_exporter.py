@@ -60,6 +60,12 @@ PORTS_PER_NODE = int(os.getenv("UFM_PORTS_PER_NODE", "8"))
 PORTS_PATH     = "/ufmRest/resources/ports"
 _NODE_RE       = re.compile(re.escape(NODE_PREFIX) + r"-\d+")
 
+
+def _pad_node(node):
+    """节点名数字后缀补零到 2 位:B300-1 → B300-01(统一命名;兼容 UFM 报补零或不补零两种)。"""
+    pre, sep, num = node.rpartition("-")
+    return f"{pre}-{int(num):02d}" if (sep and num.isdigit()) else node
+
 # ---- 源2:Telemetry :9001(counters / 误码)----
 # 默认保留 IB PM 错误计数 + PHY 误码/FEC(链路劣化所需);node_filter 默认空=全收(交换机两端都要)。
 DEF_9001_KEEP = (r"^(SymbolErrorCounter|LinkErrorRecoveryCounter|LinkDownedCounter|PortRcvErrors|"
@@ -91,8 +97,9 @@ def parse_host_ports(ports):
         m = _NODE_RE.match(nd)
         if not m:
             continue
-        node = m.group(0)
-        card = nd[len(node):].lstrip(": ").strip() or "?"
+        raw = m.group(0)                    # 原始匹配(如 B300-1),用于按长度切 card
+        node = _pad_node(raw)               # 标签用补零后的规范名 B300-01
+        card = nd[len(raw):].lstrip(": ").strip() or "?"
         out.append((node, card, str(p.get("peer_node_name") or ""),
                     str(p.get("peer_port_dname") or ""), str(p.get("active_speed") or ""),
                     1 if (p.get("logical_state") == "Active") else 0))
@@ -132,7 +139,7 @@ class UFMRestCollector:
             node_tot[node] = node_tot.get(node, 0) + 1
         yield link
 
-        expected = [f"{NODE_PREFIX}-{i}" for i in range(1, EXPECTED_NODES + 1)]
+        expected = [f"{NODE_PREFIX}-{i:02d}" for i in range(1, EXPECTED_NODES + 1)]
         nu = GaugeMetricFamily("ufm_ib_node_links_up", f"每节点 CX8 up 数(基线{PORTS_PER_NODE})", labels=["node"])
         nt = GaugeMetricFamily("ufm_ib_node_links_total", "每节点 UFM 可见 CX8 端口数", labels=["node"])
         for node in expected:
