@@ -54,7 +54,7 @@ target/release/ufm-ib-exporter --config config/exporter.local.yaml
 | Docker Compose | [deploy/docker-compose/](deploy/docker-compose/) | 在 UFM 宿主机拉取多架构镜像运行 |
 | systemd 二进制 | [deploy/systemd/](deploy/systemd/) | 下载静态二进制，以专用用户交给 systemd 管理 |
 
-[GitHub Release v0.1](https://github.com/weironz/ufm-ib-exporter/releases/tag/v0.1) 提供 Linux amd64 / arm64 压缩包、`SHA256SUMS` 和镜像 digest。标签 `v0.1` 对应程序版本 `0.1.0`；Docker 镜像为 `willdockerhub/ufm-ib-exporter:v0.1`，同时提供 `v0.1.0`、`latest`。镜像使用同一批发布二进制构建，生产建议固定摘要。
+[GitHub Release v0.1.1](https://github.com/weironz/ufm-ib-exporter/releases/tag/v0.1.1) 提供 Linux amd64 / arm64 压缩包、`SHA256SUMS` 和镜像 digest。当前程序版本为 `0.1.1`；Docker 镜像为 `willdockerhub/ufm-ib-exporter:v0.1.1`，同时提供 `latest`。镜像使用同一批发布二进制构建，生产建议固定摘要。
 
 两种方式均默认监听 `127.0.0.1:9627`，以无权限用户运行。让远端监控节点抓取时，显式绑定 UFM 管理地址并限制访问来源；REST TLS 主机名与 CA 必须匹配。来源开关、白名单和资源预算使用同一份 YAML 配置。
 

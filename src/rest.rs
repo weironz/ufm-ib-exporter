@@ -68,9 +68,6 @@ pub fn parse(data: &[u8], config: &RestConfig) -> PollResult<Collected> {
         let node = format!("{}-{number:02}", config.node_prefix);
         let card = description[raw_number.end()..].trim_start_matches([':', ' ']);
         let card = if card.is_empty() { "?" } else { card };
-        if !seen.insert((node.clone(), card.to_owned())) {
-            return Err(PollError::DuplicateSample);
-        }
         let up = usize::from(port.logical_state.as_deref() == Some("Active"));
         let labels = [
             node.as_str(),
@@ -80,6 +77,12 @@ pub fn parse(data: &[u8], config: &RestConfig) -> PollResult<Collected> {
             port.active_speed.as_deref().unwrap_or(""),
         ]
         .map(escape);
+        // UFM can give distinct physical ports the same node/card description.
+        // Their peer/cage labels distinguish them; reject only an actual
+        // collision in the complete exported Prometheus series identity.
+        if !seen.insert(labels.clone()) {
+            return Err(PollError::DuplicateSample);
+        }
         writeln!(
             links,
             "ufm_ib_link_up{{node=\"{}\",card=\"{}\",peer=\"{}\",cage=\"{}\",speed=\"{}\"}} {up}",
@@ -220,5 +223,38 @@ mod tests {
         let c = RestConfig::default();
         assert!(parse(b"[]", &c).is_ok());
         assert_eq!(parse(b"{}", &c).err(), Some(PollError::Json));
+    }
+
+    #[test]
+    fn physical_ports_can_share_a_card_description() {
+        let c = RestConfig {
+            expected_nodes: 1,
+            ..RestConfig::default()
+        };
+        for (second_peer, second_cage) in [("switch-b", "port1"), ("switch-a", "port2")] {
+            let data = serde_json::json!([
+                {"has_plane_ports": true, "node_description": "B300-01:shared-card",
+                 "peer_node_name": "switch-a", "peer_port_dname": "port1", "logical_state": "Active"},
+                {"has_plane_ports": true, "node_description": "b300-1:shared-card",
+                 "peer_node_name": second_peer, "peer_port_dname": second_cage, "logical_state": "Down"}
+            ]);
+            let result = parse(&serde_json::to_vec(&data).unwrap(), &c).unwrap();
+            let text = std::str::from_utf8(&result.data).unwrap();
+            assert_eq!(text.matches("ufm_ib_link_up{").count(), 2);
+            assert!(text.contains("ufm_ib_node_links_total{node=\"B300-01\"} 2"));
+            assert!(text.contains("ufm_ib_node_links_up{node=\"B300-01\"} 1"));
+        }
+    }
+
+    #[test]
+    fn duplicate_complete_series_are_still_rejected() {
+        let data = br#"[
+          {"has_plane_ports":true,"node_description":"B300-01:card","peer_node_name":"switch","peer_port_dname":"port","logical_state":"Active"},
+          {"has_plane_ports":true,"node_description":"b300-1:card","peer_node_name":"switch","peer_port_dname":"port","logical_state":"Down"}
+        ]"#;
+        assert_eq!(
+            parse(data, &RestConfig::default()).err(),
+            Some(PollError::DuplicateSample)
+        );
     }
 }

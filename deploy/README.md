@@ -2,16 +2,16 @@
 
 两种方案择一，都在 UFM 所在 Linux 主机运行，读取 `127.0.0.1` 上的 REST、9001 和 9002。它们使用相同的 [配置模板](../config.example.yaml)，不需要登录客户服务器或修改 UFM/SM 监听。
 
-`v0.1` Release 对应程序版本 `0.1.0`，提供 Linux amd64 / arm64 的静态二进制和 SHA-256 校验清单。Docker 镜像为 `willdockerhub/ufm-ib-exporter:v0.1`，同时发布 `v0.1.0` 和 `latest`。生产建议记录二进制校验值或使用镜像摘要。发布产物不等于生产已切换。
+`v0.1.1` Release 对应程序版本 `0.1.1`，提供 Linux amd64 / arm64 的静态二进制和 SHA-256 校验清单。Docker 镜像为 `willdockerhub/ufm-ib-exporter:v0.1.1`，同时发布 `latest`。生产建议记录二进制校验值或使用镜像摘要。发布产物不等于生产已切换。
 
 ## 获取发布包
 
-不要求目标机器安装 Rust。需要 GitHub CLI（`gh`）、`curl`、`tar`、`sha256sum` 和系统 CA 证书；原生运行必须安装发行版的 `ca-certificates` 包。
+不要求目标机器安装 Rust。需要 `curl`、`tar`、`sha256sum` 和系统 CA 证书；原生运行必须安装发行版的 `ca-certificates` 包。
 
-仓库目前为私有仓库。先在可信终端配置具有仓库读取权限的 GitHub 身份，并用 `gh auth status` 确认；私有 Release 的匿名下载 URL 会返回 404。以下使用 GitHub CLI 下载，凭据不放进部署文件，也不提供给 exporter 服务。
+仓库与 Release 现已公开，可直接通过 HTTPS 下载。Exporter 服务不需要 GitHub 凭据。
 
 ```sh
-version=v0.1
+version=v0.1.1
 case "$(uname -m)" in
   x86_64) arch=amd64 ;;
   aarch64|arm64) arch=arm64 ;;
@@ -20,7 +20,9 @@ esac
 asset="ufm-ib-exporter-${version}-linux-${arch}.tar.gz"
 mkdir -p "ufm-ib-exporter-${version}"
 cd "ufm-ib-exporter-${version}"
-gh release download "$version" --repo weironz/ufm-ib-exporter --pattern "$asset" --pattern SHA256SUMS
+base="https://github.com/weironz/ufm-ib-exporter/releases/download/${version}"
+curl -fLO "$base/$asset"
+curl -fLO "$base/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
 tar -xzf "$asset"
 ./ufm-ib-exporter --version
@@ -118,7 +120,7 @@ curl -fsS http://127.0.0.1:9627/metrics
 
 ## CI 发布
 
-推送版本标签（本次为 `v0.1`）后，CI 先执行格式、Clippy、单元/集成测试、真实 Prometheus 规则和容器验证，再构建两个架构的 musl 静态二进制。镜像直接使用这两个发布二进制，支持 `linux/amd64`、`linux/arm64`，不在 Docker Hub 构建另一份应用。
+推送版本标签（本次为 `v0.1.1`）后，CI 先执行格式、Clippy、单元/集成测试、真实 Prometheus 规则和容器验证，再构建两个架构的 musl 静态二进制。镜像直接使用这两个发布二进制，支持 `linux/amd64`、`linux/arm64`，不在 Docker Hub 构建另一份应用。
 
 Docker Hub 凭据使用仓库 Actions Secret：`DOCKERHUB_USERNAME`（可省略，默认 `willdockerhub`）和 `DOCKERHUB_TOKEN`；兼容 `DOCKERHUB_PASSWORD` 作为 token 的替代名称。Token 需允许写入 `willdockerhub/ufm-ib-exporter`。GitHub Release 使用工作流自带的 `GITHUB_TOKEN`，仅发布 job 获得 `contents: write`。
 

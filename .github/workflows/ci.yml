@@ -57,6 +57,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       epoch: ${{ steps.version.outputs.epoch }}
+      image_tags: ${{ steps.version.outputs.image_tags }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate version and Docker Hub credential availability
@@ -82,6 +83,8 @@ jobs:
               raise SystemExit('Add release notes at docs/releases/<tag>.md')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               print(f'tag={tag}\nversion={version}', file=output)
+              tags = dict.fromkeys([f'willdockerhub/ufm-ib-exporter:{tag}', f'willdockerhub/ufm-ib-exporter:v{version}', 'willdockerhub/ufm-ib-exporter:latest'])
+              print('image_tags<<IMAGE_TAGS\n' + '\n'.join(tags) + '\nIMAGE_TAGS', file=output)
           PY
           echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
       - name: Prevent replacement of a published release
@@ -197,10 +200,7 @@ jobs:
           context: ${{ runner.temp }}/release-image
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            willdockerhub/ufm-ib-exporter:${{ needs.release-metadata.outputs.tag }}
-            willdockerhub/ufm-ib-exporter:v${{ needs.release-metadata.outputs.version }}
-            willdockerhub/ufm-ib-exporter:latest
+          tags: ${{ needs.release-metadata.outputs.image_tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
