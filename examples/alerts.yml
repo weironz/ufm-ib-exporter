@@ -18,7 +18,7 @@ groups:
           description: "UFM 报告该 CX8 端口 logical_state≠Active。node={{ $labels.node }} card={{ $labels.card }} peer={{ $labels.peer }} cage={{ $labels.cage }} speed={{ $labels.speed }}。"
 
       # 与配置中的基线比较，覆盖端口 down 或从 Fabric 消失;
-      # 用 ufm_up==1 门控,避免 UFM 抖动回退 last-good 时按陈旧数据误报。
+      # 用 ufm_up==1 门控，只对来源健康且未过期的数据评估。
       - alert: IBCx8NodeDegraded
         expr: (ufm_ib_node_links_up < on(node, job, instance) ufm_ib_node_links_expected) and on(job, instance) ufm_up == 1
         for: 5m

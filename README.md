@@ -2,7 +2,7 @@
 
 读取 NVIDIA UFM **已有数据**，输出供 Prometheus / vmagent 使用的过滤结果。推荐部署在 **UFM 所在机器**：原始大响应走本机回环，过滤后的结果再发给监控节点。不登录客户服务器，不额外执行 `perfquery`、`mlxlink` 或清计数器操作。
 
-Rust 实现是主入口；根目录 `ufm_exporter.py` 保留为旧版对照与回退依据，新镜像不包含 Python。代码准备、镜像发布和生产切换分别进行；本仓库更新不代表生产已部署。
+Exporter 的实现、构建和运行均使用 Rust。代码准备、镜像发布和生产切换分别进行；本仓库更新不代表生产已部署。
 
 ## 三个数据源
 
@@ -36,7 +36,7 @@ cp config.example.yaml config/exporter.local.yaml
 cp .env.example .env
 ```
 
-私下设置环境变量 `UFM_PASSWORD`；配置文件只放非秘密参数。REST 的 HTTPS 证书必须受信任：可用 `ca_file` / `UFM_CA_FILE` 指定 CA bundle，并让 URL 主机名与证书匹配。新实现默认验证 TLS，不继承旧 Python 的 `verify=False`。
+私下设置环境变量 `UFM_PASSWORD`；配置文件只放非秘密参数。REST 的 HTTPS 证书必须受信任：可用 `ca_file` / `UFM_CA_FILE` 指定 CA bundle，并让 URL 主机名与证书匹配。默认验证 TLS 证书及主机名。
 
 ```sh
 # 先在当前 shell 安全注入 UFM_PASSWORD；程序不自动读取 .env。
@@ -66,7 +66,7 @@ docker build --secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt -t ufm-
 
 默认镜像标签 `willdockerhub/ufm-ib-exporter:rust-0.1.0` 是新版本标签，不能假定已发布；生产应从固定 Git 提交构建/获取已发布镜像并核对摘要，保留旧镜像、配置和历史。
 
-`docker-compose.ufm.yml` 是兼容模式：只运行 9001/9002，REST 继续由已有实例处理。使用时把 `.env` 的 `LISTEN_PORT` 改为 `9628`。两种模式择一，避免重复采集；不要把旧 Python 脚本挂载进 Rust 镜像。
+`docker-compose.ufm.yml` 是仅 telemetry 模式：只运行 9001/9002，REST 继续由已有实例处理。使用时把 `.env` 的 `LISTEN_PORT` 改为 `9628`。两种模式择一，避免重复采集。
 
 ## 自定义与重载
 
@@ -116,6 +116,8 @@ REST 的 `ufm_ib_*` 及 telemetry 原生业务指标名保持兼容；状态含 
 
 ## 验证与性能
 
+运行时只需 Rust 二进制。以下集成测试与合成数据工具使用 Python 3 标准库，不需要 pip 依赖，也不参与生产采集。
+
 ```sh
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
@@ -127,4 +129,4 @@ cargo build --locked --release
 python3 tools/benchmark.py --binary target/release/ufm-ib-exporter --input-mib 512
 ```
 
-[压测方法与结果](docs/benchmark.md)提供合成数据下的 Rust/Python 对照；不是生产 UFM 负载或 XDR 设备兼容性验收。生产切换前须观察自然周期、原生观测时间、完整目标覆盖和 UFM 本机资源，保留旧实例的回退入口。
+[压测方法与结果](docs/benchmark.md)记录 Rust exporter 在不同输入量下的耗时与内存；不是生产 UFM 负载或 XDR 设备兼容性验收。生产切换前须观察自然周期、原生观测时间、完整目标覆盖和 UFM 本机资源，保留切换前的镜像摘要与部署配置。

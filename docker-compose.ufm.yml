@@ -1,4 +1,4 @@
-# Compatibility: telemetry only at :9628 while REST remains elsewhere.
+# Telemetry-only profile at :9628 while REST is collected elsewhere.
 # Do not run alongside another collector of these same telemetry sources.
 services:
   ufm-ib-telemetry:
