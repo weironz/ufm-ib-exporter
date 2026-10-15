@@ -373,7 +373,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[5m]))) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)",
+          "expr": "(topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[12m]))) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)",
           "legendFormat": "{{host_name}} {{m_label}}"
         }
       ],
@@ -394,7 +394,8 @@
             "lastNotNull"
           ]
         }
-      }
+      },
+      "description": "以 12 分钟窗口计算计数器变化率，适配 180 秒抓取间隔；这不是 BER。"
     },
     {
       "id": 10,
@@ -978,5 +979,5 @@
       }
     }
   ],
-  "version": 4
+  "version": 5
 }
