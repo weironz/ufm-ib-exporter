@@ -193,11 +193,20 @@ class Exporter:
         eventually(lambda: get(self.base + '/readyz')[0] == 200)
 
     def reload(self):
+        def reload_count():
+            return sum(float(line.split()[-1]) for line in self.metrics().splitlines()
+                       if line.startswith(('ufm_config_reload_successes_total ', 'ufm_config_reload_failures_total ')))
+
+        before = reload_count()
         self.path.write_text(json.dumps(self.config))
         if self.container:
             subprocess.run(['docker', 'kill', '--signal', 'HUP', self.container], check=True, capture_output=True)
         else:
             self.process.send_signal(signal.SIGHUP)
+        # Delivery of SIGHUP is asynchronous. Old /readyz can still be 200 until
+        # the handler clears caches; wait for acceptance/rejection before callers
+        # wait for new-generation data or check that invalid config was retained.
+        eventually(lambda: reload_count() > before)
 
     def check_liveness(self):
         command = ['docker', 'exec', self.container, '/usr/local/bin/ufm-ib-exporter', '--healthcheck'] if self.container else [BINARY, '--config', str(self.path), '--healthcheck']
@@ -383,6 +392,7 @@ class EndToEnd(unittest.TestCase):
             with (root / 'prometheus.log').open('w+') as log:
                 process = subprocess.Popen([os.environ['PROMETHEUS_BINARY'], '--config.file=' + str(root / 'prometheus.json'), '--storage.tsdb.path=' + str(root / 'data'), f'--web.listen-address=127.0.0.1:{pport}'], stdout=log, stderr=log)
                 try:
+                    eventually(lambda: get(f'http://127.0.0.1:{pport}/-/ready')[0] == 200)
                     def query(q):
                         return json.loads(get(f'http://127.0.0.1:{pport}/api/v1/query?' + urllib.parse.urlencode({'query': q}))[1])['data']['result']
                     eventually(lambda: query('up{job="ufm-rust-fixture"}') and query('up{job="ufm-rust-fixture"}')[0]['value'][1] == '1')

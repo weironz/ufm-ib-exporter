@@ -6,7 +6,9 @@
 
 ## 获取发布包
 
-不要求目标机器安装 Rust。需要 `curl`、`tar`、`sha256sum` 和系统 CA 证书；原生运行必须安装发行版的 `ca-certificates` 包。
+不要求目标机器安装 Rust。需要 GitHub CLI（`gh`）、`curl`、`tar`、`sha256sum` 和系统 CA 证书；原生运行必须安装发行版的 `ca-certificates` 包。
+
+仓库目前为私有仓库。先在可信终端配置具有仓库读取权限的 GitHub 身份，并用 `gh auth status` 确认；私有 Release 的匿名下载 URL 会返回 404。以下使用 GitHub CLI 下载，凭据不放进部署文件，也不提供给 exporter 服务。
 
 ```sh
 version=v0.1
@@ -16,11 +18,9 @@ case "$(uname -m)" in
   *) echo 'Unsupported architecture' >&2; exit 1 ;;
 esac
 asset="ufm-ib-exporter-${version}-linux-${arch}.tar.gz"
-base="https://github.com/weironz/ufm-ib-exporter/releases/download/${version}"
 mkdir -p "ufm-ib-exporter-${version}"
 cd "ufm-ib-exporter-${version}"
-curl -fLO "$base/$asset"
-curl -fLO "$base/SHA256SUMS"
+gh release download "$version" --repo weironz/ufm-ib-exporter --pattern "$asset" --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 tar -xzf "$asset"
 ./ufm-ib-exporter --version
