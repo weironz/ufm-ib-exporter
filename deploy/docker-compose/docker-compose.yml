@@ -1,8 +1,7 @@
-# UFM-local profile. Prepare config/exporter.local.yaml and .env first.
+# Run from this directory after preparing config/exporter.local.yaml and .env.
 services:
   ufm-ib-exporter:
-    build: .
-    image: ${IMAGE:-willdockerhub/ufm-ib-exporter:rust-0.1.0}
+    image: ${IMAGE:-willdockerhub/ufm-ib-exporter:v0.1}
     container_name: ufm-ib-exporter
     network_mode: host
     user: "65532:65532"

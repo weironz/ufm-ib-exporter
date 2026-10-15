@@ -1,9 +1,17 @@
 .git
 .env
+**/.env
+*.env
+**/*.env
 *.local.yaml
+**/*.local.yaml
 config/
+**/config/
 target/
 artifacts/
 __pycache__/
+**/__pycache__/
 *.pyc
+**/*.pyc
 *.log
+**/*.log

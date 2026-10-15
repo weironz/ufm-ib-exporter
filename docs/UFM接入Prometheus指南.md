@@ -2,6 +2,7 @@
 
 本项目使用 Rust 实现。请从[项目 README](../README.md)进入，依次查看：
 
+- [Docker Compose 与 systemd 部署](../deploy/README.md)
 - [三源配置及资源预算](../config.example.yaml)
 - [架构、官方与社区方法借鉴](rust-design.md)
 - [合成数据压测](benchmark.md)

@@ -33,7 +33,6 @@ Exporter 的实现、构建和运行均使用 Rust。代码准备、镜像发布
 cargo build --locked --release
 mkdir -p config
 cp config.example.yaml config/exporter.local.yaml
-cp .env.example .env
 ```
 
 私下设置环境变量 `UFM_PASSWORD`；配置文件只放非秘密参数。REST 的 HTTPS 证书必须受信任：可用 `ca_file` / `UFM_CA_FILE` 指定 CA bundle，并让 URL 主机名与证书匹配。默认验证 TLS 证书及主机名。
@@ -46,27 +45,26 @@ target/release/ufm-ib-exporter --config config/exporter.local.yaml
 
 `--check-config` 不请求上游。`--print-default-config` 只打印程序默认配置，省略密码字段；不打印当前环境或实际配置中的秘密。
 
-## UFM 同机 Docker Compose
+## 部署与发布
 
-编辑 `.env` 的密码和监听地址，并编辑 `config/exporter.local.yaml` 的 REST URL、CA、白名单与范围。默认仅监听 `127.0.0.1`；让远端监控节点访问时，显式绑定目标管理地址并限制访问来源。
+[deploy/README.md](deploy/README.md) 提供两种完整方案：
 
-```sh
-docker compose --env-file .env config --quiet
-docker compose --env-file .env build
-docker compose --env-file .env up -d
-```
+| 方式 | 部署文件 | 适用情况 |
+| --- | --- | --- |
+| Docker Compose | [deploy/docker-compose/](deploy/docker-compose/) | 在 UFM 宿主机拉取多架构镜像运行 |
+| systemd 二进制 | [deploy/systemd/](deploy/systemd/) | 下载静态二进制，以专用用户交给 systemd 管理 |
 
-Compose 使用 host 网络读取 UFM 宿主机回环接口，非 root、只读文件系统、无额外 capabilities，资源起点为 1 CPU / 1 GiB；这是待实机压测的限制，不是任何规模的容量保证。私有配置目录必须对容器 UID 65532 可读；只赋予必要的读取权限。自签证书要额外挂载 CA 并设置 `ca_file`。
+[GitHub Release v0.1](https://github.com/weironz/ufm-ib-exporter/releases/tag/v0.1) 提供 Linux amd64 / arm64 压缩包、`SHA256SUMS` 和镜像 digest。标签 `v0.1` 对应程序版本 `0.1.0`；Docker 镜像为 `willdockerhub/ufm-ib-exporter:v0.1`，同时提供 `v0.1.0`、`latest`。镜像使用同一批发布二进制构建，生产建议固定摘要。
 
-Cloud 构建需要受信任代理 CA 时，用临时 BuildKit secret，不把 Cloud CA 写入镜像：
+两种方式均默认监听 `127.0.0.1:9627`，以无权限用户运行。让远端监控节点抓取时，显式绑定 UFM 管理地址并限制访问来源；REST TLS 主机名与 CA 必须匹配。来源开关、白名单和资源预算使用同一份 YAML 配置。
+
+CI 在每次分支推送和 PR 执行检查；推送版本标签后，检查通过才构建并发布二进制及 Docker 镜像。Docker Hub 使用 Actions Secret `DOCKERHUB_TOKEN`（兼容 `DOCKERHUB_PASSWORD`），账号默认 `willdockerhub`，可由 `DOCKERHUB_USERNAME` 指定。
+
+开发者仍可使用根目录 Dockerfile 从源码构建；Cloud 构建需要代理 CA 时通过临时 secret 提供：
 
 ```sh
 docker build --secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt -t ufm-ib-exporter:local .
 ```
-
-默认镜像标签 `willdockerhub/ufm-ib-exporter:rust-0.1.0` 是新版本标签，不能假定已发布；生产应从固定 Git 提交构建/获取已发布镜像并核对摘要，保留旧镜像、配置和历史。
-
-`docker-compose.ufm.yml` 是仅 telemetry 模式：只运行 9001/9002，REST 继续由已有实例处理。使用时把 `.env` 的 `LISTEN_PORT` 改为 `9628`。两种模式择一，避免重复采集。
 
 ## 自定义与重载
 
@@ -88,7 +86,8 @@ Linux 下用 SIGHUP 验证并加载新来源配置：
 
 ```sh
 # 完整写好/原子替换配置文件后，再发送信号。
-docker compose kill -s SIGHUP ufm-ib-exporter
+docker compose --env-file deploy/docker-compose/.env -f deploy/docker-compose/docker-compose.yml kill -s SIGHUP ufm-ib-exporter
+# systemd 部署使用：sudo systemctl reload ufm-ib-exporter
 ```
 
 来源配置在同一代切换，旧请求取消、旧缓存清除；错误配置保留原配置。监听地址、线程数、并发上限和 CA 变化需重启，SIGHUP 会拒绝这些变化。环境变量优先于 YAML；运行中无法通过修改宿主机 `.env` 改变进程环境，修改环境变量需重建容器。
