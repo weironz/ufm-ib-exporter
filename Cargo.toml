@@ -1,0 +1,28 @@
+[package]
+name = "ufm-ib-exporter"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Bounded, cached Prometheus export of existing NVIDIA UFM data"
+license = "LicenseRef-Proprietary"
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+bytes = "1"
+futures-util = "0.3"
+memchr = "2"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "stream", "gzip", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+smallvec = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "net", "sync", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

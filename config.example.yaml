@@ -1,0 +1,68 @@
+# UFM-local profile. Set UFM_PASSWORD through the environment; never put it here.
+# Bare binary defaults keep telemetry disabled; this explicit profile enables all three.
+listen: 127.0.0.1:9627
+worker_threads: 2
+max_heavy_polls: 1
+max_concurrent_scrapes: 2
+# ca_file: /run/certificates/ufm-ca.pem
+
+rest:
+  enabled: true
+  url: https://127.0.0.1/ufmRest/resources/ports
+  username: admin
+  interval_seconds: 60
+  timeout_seconds: 30
+  max_age_seconds: 180
+  max_input_bytes: 16777216
+  max_cache_bytes: 8388608
+  node_prefix: B300
+  expected_nodes: 32
+  ports_per_node: 8
+
+telemetry_9001:
+  enabled: true
+  url: http://127.0.0.1:9001/metrics
+  interval_seconds: 180
+  timeout_seconds: 120
+  max_age_seconds: 420
+  max_observation_age_seconds: 420
+  require_timestamps: true
+  preserve_timestamps: false
+  max_input_bytes: 536870912
+  max_cache_bytes: 67108864
+  max_line_bytes: 262144
+  max_series: 250000
+  max_label_sets: 30000
+  max_metric_names: 1024
+  keep:
+    - '^(SymbolErrorCounter|LinkErrorRecoveryCounter|LinkDownedCounter|PortRcvErrors|PortRcvRemotePhysicalErrors|PortRcvSwitchRelayErrors|PortXmitDiscards|LocalLinkIntegrityErrors|ExcessiveBufferOverrunErrors|PortXmitWait|phy_c_symbol_errors|phy_c_sync_headers_errors|phy_c_rs_fec_corrected_symbols_total)'
+  # node_filter: '(?i)b300|q3400'
+  drop_labels: []
+  # label_filters:
+  #   port_num: '^(1|2)$'
+  # Optional native counter-set/shard URLs. When supplied, replaces `url`.
+  # Read sequentially; aggregate byte/time budgets apply to the COMPLETE poll.
+  # Verify these native routes and all shard numbers for your UFM version first.
+  # urls:
+  #   - http://127.0.0.1:9001/metrics?num_shards=2&shard=0&sharding_field=port_guid
+  #   - http://127.0.0.1:9001/metrics?num_shards=2&shard=1&sharding_field=port_guid
+
+telemetry_9002:
+  enabled: true
+  url: http://127.0.0.1:9002/metrics/CableInfo
+  interval_seconds: 600
+  timeout_seconds: 300
+  max_age_seconds: 1260
+  max_observation_age_seconds: 1260
+  require_timestamps: true
+  preserve_timestamps: false
+  max_input_bytes: 1610612736
+  max_cache_bytes: 134217728
+  max_line_bytes: 262144
+  max_series: 250000
+  max_label_sets: 30000
+  max_metric_names: 1024
+  keep:
+    - '^(rx_power_lane[0-7]|tx_power_lane[0-7]|cable_temperature)$'
+  # node_filter: '(?i)b300|q3400'
+  drop_labels: [Temperature]

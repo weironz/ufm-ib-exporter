@@ -1,123 +1,130 @@
-# UFM IB Exporter
+# UFM IB Exporter · Rust
 
-一个轻量级 Prometheus exporter,通过 **NVIDIA UFM**(InfiniBand Subnet Manager)的 REST API
-采集 InfiniBand 计算网每口的**链路 up/down**,面向 **HGX B300 + ConnectX-8(XDR 800G)+ Quantum-X800(Q3400)** 机群。
+读取 NVIDIA UFM **已有数据**，输出供 Prometheus / vmagent 使用的过滤结果。推荐部署在 **UFM 所在机器**：原始大响应走本机回环，过滤后的结果再发给监控节点。不登录客户服务器，不额外执行 `perfquery`、`mlxlink` 或清计数器操作。
 
-> 从 `b300-redfish-exporter`(BMC 带外硬件监控)中抽离独立成项目:IB 链路是另一套数据源(UFM,而非 BMC),职责单一、可独立部署。
+Rust 实现是主入口；根目录 `ufm_exporter.py` 保留为旧版对照与回退依据，新镜像不包含 Python。代码准备、镜像发布和生产切换分别进行；本仓库更新不代表生产已部署。
 
-## 为什么走 UFM,而不是 BMC
+## 三个数据源
 
-- **BMC 带外读 IB 链路不可靠(假阴性)**:实测 BMC 经 NC-SI/MCTP sideband 会把主机侧 **ACTIVE 800G** 的口误报成 `Disabled/LinkDown`,且各节点端口数不一致。UFM 是该 fabric 的 SM,链路状态由它说了算。
-- **为什么用 REST `/resources/ports`,而不是 UFM telemetry `/metrics`**:UFM telemetry 端点单次是 **158MB(:9001)/ 1.26GB(:9002)** 的"火管",直接喂 Prometheus 会打爆(且 `metric_relabel` 是先全量下载+解析再 drop,省存储但不省传输/解析)。REST `/resources/ports` 是**小 JSON**,正好够 up/down。富计数器/BER 趋势可**选启用为源 2/源 3**:在 UFM 本机读 loopback 流式裁剪后小体积暴露,见下文 [Telemetry 采集](#telemetry-采集90019002可选--误码闪断ber)。
+| 数据源 | 默认配置文件中的范围 | 周期 |
+| --- | --- | --- |
+| REST `/ufmRest/resources/ports` | 物理链路 up/down、节点基线、peer/cage、速率 | 60 秒 |
+| `127.0.0.1:9001/metrics` | 必要的错误、闪断、PHY/FEC 和 PortXmitWait 计数 | 180 秒 |
+| `127.0.0.1:9002/metrics/CableInfo` | Rx/Tx 每 lane 光功率、`cable_temperature` | 600 秒 |
 
-## 关键设计:掉线口会"消失"
+`config.example.yaml` 显式启用三源；不加载配置文件时，程序默认只启用 REST。所有来源都可独立关闭。字段名、计数单位、显式 BER 和 native 子路径是否存在，以 UFM 版本及现场为准。
 
-down/掉线的 CX8 口在 UFM 里是**直接从端口列表消失**(而非显示 `Down`),整节点也可能整个消失。
-所以:
+## 大响应的处理
 
-- 逐口 `ufm_ib_link_up == 0` **抓不到**已消失的口;
-- 主力信号是 **`ufm_ib_node_links_up < 8`** —— exporter 对**所有应在册节点(`B300-1..N`)强制发指标、缺席补 0**,一条阈值同时覆盖「端口 down / 端口消失 / 整节点消失」三种。
+- 以最多 64 KiB 的片段扫描，跨片段只保留有大小上限的未完成行；先按指标名过滤，再解析需要的标签和时间戳。
+- 三源后台更新；HTTP 抓取只读完整、不可变缓存，使用共享字节缓冲，不为每次抓取复制整份数据。
+- 默认两个运行线程、一个大源采集许可：9001/9002 错开，REST 独立。周期是每轮完成后的等待时间；等待其他大源也会延长实际更新间隔。
+- 对输入、单行、缓存、指标数量、标签组合、总处理时长和抓取并发设置上限；缓存全部成功后才发布。多个原生分片顺序读取，任一失败则拒绝整轮更新。
+- 失败、空响应、重复指标、过期或超预算时停止输出该源业务值；保留诊断状态，不无限回放 last-good。
+- 需要的来源标签可配置过滤；丢弃标签后若产生重复序列，整轮失败，不悄悄合并不同端口。
 
-## 指标
+本机部署减少原始数据跨网传输；Rust 减少 exporter 的处理开销。两者都不消除 UFM 生成原始响应的成本。[设计依据与性能边界](docs/rust-design.md)。
 
-| 指标 | 标签 | 含义 |
-|---|---|---|
-| `ufm_up` | — | UFM REST 可达且解析成功=1,失败=0(失败回退上次快照) |
-| `ufm_scrape_error` | — | 本次抓取失败=1 |
-| `ufm_scrape_duration_seconds` | — | 本次抓取耗时(秒) |
-| `ufm_data_age_seconds` | — | 所展示数据年龄(秒;0=本次新鲜,>0=回退了缓存) |
-| `ufm_ib_link_up` | node, card, peer, cage, speed | 单口 CX8 链路 up=1/down=0;`peer`=Q3400 名,`cage`=交换机 cage |
-| `ufm_ib_node_links_up` | node | 每节点 up 链路数(基线 8;`<8` 即异常,含整节点缺失=0) |
-| `ufm_ib_node_links_total` | node | 每节点 UFM 可见 CX8 端口数 |
-| `ufm_ib_links_expected` | — | 全网应在线链路数(节点数×每节点基线) |
-| `ufm_ib_links_up` | — | 全网 up 链路总数 |
-| `ufm_ib_links_missing` | — | 全网未 up 链路数(down/消失/整节点缺失) |
+## 原生运行
 
-```promql
-ufm_ib_node_links_up < 8 and on() ufm_up == 1   # 不足 8 条 up 的节点
-ufm_ib_links_up / ufm_ib_links_expected          # 全网在线率
-ufm_ib_link_up == 0                              # 具体哪口 down(带 peer/cage 定位)
-```
+需要 Rust 1.88+。构建不连接 UFM：
 
-## 快速开始
-
-```bash
+```sh
+cargo build --locked --release
+mkdir -p config
+cp config.example.yaml config/exporter.local.yaml
 cp .env.example .env
-vi .env                         # 填 UFM_HOST / UFM_USERNAME / UFM_PASSWORD
-
-docker compose up -d --build
-curl -s http://localhost:9627/metrics | grep -E 'ufm_up|ufm_ib_links_'
 ```
 
-不想用 Docker 也可直接跑:
+私下设置环境变量 `UFM_PASSWORD`；配置文件只放非秘密参数。REST 的 HTTPS 证书必须受信任：可用 `ca_file` / `UFM_CA_FILE` 指定 CA bundle，并让 URL 主机名与证书匹配。新实现默认验证 TLS，不继承旧 Python 的 `verify=False`。
 
-```bash
-pip install -r requirements.txt
-UFM_HOST=172.16.30.33 UFM_USERNAME=admin UFM_PASSWORD=*** python ufm_exporter.py
+```sh
+# 先在当前 shell 安全注入 UFM_PASSWORD；程序不自动读取 .env。
+target/release/ufm-ib-exporter --config config/exporter.local.yaml --check-config
+target/release/ufm-ib-exporter --config config/exporter.local.yaml
 ```
 
-## 配置(环境变量)
+`--check-config` 不请求上游。`--print-default-config` 只打印程序默认配置，省略密码字段；不打印当前环境或实际配置中的秘密。
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `UFM_HOST` | 172.16.30.33 | UFM 地址 |
-| `UFM_USERNAME` / `UFM_PASSWORD` | admin / — | UFM REST 凭据(`.env` 注入,不入库) |
-| `LISTEN_PORT` | 9627 | exporter 监听端口 |
-| `TIMEOUT` | 30 | UFM 请求超时(秒) |
-| `UFM_NODE_PREFIX` | B300 | 只采该前缀的主机 CA 端口(交换机口自动排除) |
-| `UFM_EXPECTED_NODES` | 32 | 应在册节点数(`B300-1..N`),用于整节点消失检测 |
-| `UFM_PORTS_PER_NODE` | 8 | 每节点 CX8 端口基线 |
+## UFM 同机 Docker Compose
 
-## Telemetry 采集(:9001/:9002,可选)— 误码/闪断/BER
+编辑 `.env` 的密码和监听地址，并编辑 `config/exporter.local.yaml` 的 REST URL、CA、白名单与范围。默认仅监听 `127.0.0.1`；让远端监控节点访问时，显式绑定目标管理地址并限制访问来源。
 
-REST 只给 up/down。**链路劣化**(误码、闪断、FEC/BER 趋势)在 UFM telemetry 端点:`:9001`(counters,158MB)、`:9002`(rich+光学,1.26GB),**默认只绑 loopback**。本 exporter 可作第 2/3 源,把它们**在 UFM 本机读取 → 流式裁剪 → 小体积暴露**给 Prometheus(158MB 解析留在本地,过网仅十几 MB)。指标行的显式毫秒时间戳会被剥除,让 Prometheus 用 scrape 时间(避免缓存数据带旧时间戳被拒)。
-
-三源各自独立启停 / 传参(详见 `.env.example`):
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `UFM_COLLECT_REST` | true | 源1 · REST up/down |
-| `UFM_COLLECT_9001` | false | 源2 · :9001 IB 错误计数 + PHY 误码 + FEC |
-| `UFM_9001_URL` | `http://127.0.0.1:9001/metrics` | 同机用 loopback,异机填 mgmt IP |
-| `UFM_9001_INTERVAL` | 180 | 后台拉取间隔(秒),BER 慢变量 |
-| `UFM_9001_NODE_FILTER` | — | `node_description` 正则,空=全收(如 `B300\|Q3400`) |
-| `UFM_9001_KEEP` | — | 指标名白名单正则,空=代码默认 |
-| `UFM_COLLECT_9002` / `UFM_9002_*` | false | 源3 · :9002 光功率/温度,同上(慎用 1.26GB) |
-
-新增元指标:`ufm_telemetry_up{source}` · `_scrape_error{source}` · `_data_age_seconds{source}` · `_series{source}` · `_poll_seconds{source}`。
-
-### 在 UFM 本机部署(docker compose)
-
-见 [`docker-compose.ufm.yml`](docker-compose.ufm.yml):`network_mode: host`(读宿主 `127.0.0.1:9001` + 直接在 mgmt IP 暴露)。**UFM 通常在隔离管理网、无外网**,无法 build/pull,故复用已 load 的镜像(仅取 python+依赖)+ **挂载脚本**覆盖:
-
-```bash
-# 在有外网的机器(如 bastion)上把镜像送到 UFM(免 UFM 联网)
-docker save willdockerhub/ufm-ib-exporter:<tag> | ssh <UFM> 'docker load'
-# UFM 上(脚本走挂载,改脚本只需 restart,不重 build)
-docker compose -f docker-compose.ufm.yml up -d
-curl -s localhost:9628/metrics | grep ufm_telemetry_
+```sh
+docker compose --env-file .env config --quiet
+docker compose --env-file .env build
+docker compose --env-file .env up -d
 ```
 
-Prometheus 用 `<UFM_mgmt_IP>:9628` 抓(本仓 b300 栈已加 `ufm-ib-telemetry` job);Grafana 见 [`grafana/ufm_ib_quality.json`](grafana/ufm_ib_quality.json)(闪断 Top / symbol err / FEC→BER 趋势)。
+Compose 使用 host 网络读取 UFM 宿主机回环接口，非 root、只读文件系统、无额外 capabilities，资源起点为 1 CPU / 1 GiB；这是待实机压测的限制，不是任何规模的容量保证。私有配置目录必须对容器 UID 65532 可读；只赋予必要的读取权限。自签证书要额外挂载 CA 并设置 `ca_file`。
 
-## 接入 Prometheus
+Cloud 构建需要受信任代理 CA 时，用临时 BuildKit secret，不把 Cloud CA 写入镜像：
 
-把 [`examples/prometheus-job.yml`](examples/prometheus-job.yml) 的 job 加进你的 `prometheus.yml`,
-把 [`examples/alerts.yml`](examples/alerts.yml)(`UFMDown` / `IBCx8LinkDown` / `IBCx8NodeDegraded`)放进 rule_files 目录。
+```sh
+docker build --secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt -t ufm-ib-exporter:local .
+```
 
-- 与既有监控栈**同一 docker 网络**:target 用容器名 `ufm-ib-exporter:9627`(见 `docker-compose.yml` 里 networks 注释)。
-- **独立运行**:target 用 `<宿主IP>:9627`。
+默认镜像标签 `willdockerhub/ufm-ib-exporter:rust-0.1.0` 是新版本标签，不能假定已发布；生产应从固定 Git 提交构建/获取已发布镜像并核对摘要，保留旧镜像、配置和历史。
 
-## Grafana 大盘
+`docker-compose.ufm.yml` 是兼容模式：只运行 9001/9002，REST 继续由已有实例处理。使用时把 `.env` 的 `LISTEN_PORT` 改为 `9628`。两种模式择一，避免重复采集；不要把旧 Python 脚本挂载进 Rust 镜像。
 
-[`grafana/ufm_ib.json`](grafana/ufm_ib.json) —— 全网在线率 / 每节点 up(基线8,<8 标红)/ down 明细(带 peer·cage 定位)/ 趋势,数据源 uid 用 `prometheus`。
-provisioning 部署:拷进 Grafana 的 `provisioning/dashboards/<folder>/` 并加一个 file provider,然后 **`docker compose restart grafana`**(provisioned 大盘改文件不会热加载,必须重启 grafana)。
+## 自定义与重载
 
-## 镜像
+完整参数见 [config.example.yaml](config.example.yaml)。支持指标正则 `keep`、节点 `node_filter`、任意标签 `label_filters`、`drop_labels`、来源开关、周期和各类预算。例如只保留指定端口的模块温度：
 
-Docker Hub:`willdockerhub/ufm-ib-exporter:latest`(`docker compose up -d` 默认即用,或 `docker compose pull` 拉取)。
-本地构建:`docker build -t willdockerhub/ufm-ib-exporter:latest .`
+```yaml
+telemetry_9002:
+  enabled: true
+  keep: ['^cable_temperature$']
+  label_filters:
+    Port: '^(1|2)$'
+```
 
-## License
+标签必须实际存在；`node_filter` 兼容 `node_description` 和 `Port_Name`。小写节点名也可使用 `(?i)` 忽略大小写。9002 省略的字段继承光学默认值，不会误用 9001 地址。
 
-内部使用。
+原生计数集、分片 URL 可以配置在 `urls` 列表中替代 `url`，但必须是本程序接受的 Prometheus 文本格式；官方 TFS 文档的 CSV 路由不能直接使用。所有需要的分片均应列出，分片不会自动发现或减少合计数据量。现网未知的路由不会被程序自动探测。
+
+Linux 下用 SIGHUP 验证并加载新来源配置：
+
+```sh
+# 完整写好/原子替换配置文件后，再发送信号。
+docker compose kill -s SIGHUP ufm-ib-exporter
+```
+
+来源配置在同一代切换，旧请求取消、旧缓存清除；错误配置保留原配置。监听地址、线程数、并发上限和 CA 变化需重启，SIGHUP 会拒绝这些变化。环境变量优先于 YAML；运行中无法通过修改宿主机 `.env` 改变进程环境，修改环境变量需重建容器。
+
+## Prometheus 与数据有效期
+
+对外统一 `/metrics`。`/healthz` 只代表进程可响应；`/readyz` 要求所有启用来源都有可用缓存。
+
+```yaml
+scrape_configs:
+  - job_name: ufm-ib
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: ['UFM_MANAGEMENT_IP:9627']
+```
+
+REST 的 `ufm_ib_*` 及 telemetry 原生业务指标名保持兼容；状态含 `ufm_up`、`ufm_telemetry_up{source}`、成功轮次、读取/缓存字节数、原生观测年龄和失败原因。下载失败不会把缺失节点补成当前硬件异常；失败来源不输出业务指标。
+
+默认要求 telemetry 的显式**毫秒时间戳**。缓存样本供每次 scrape 使用，同时输出 `ufm_telemetry_observed_at_seconds{原有标签,telemetry_source}` 记录原始观测时间。业务值仅在缓存年龄、最旧接受观测年龄均未过期时输出；任何冻结数据不会因 HTTP 200 或 scrape 而续期。`require_timestamps: false` 只用于确认无原生时间戳的特殊来源，此时无法证明设备观测新鲜度。
+
+可选 `preserve_timestamps: true` 保留原始业务时间戳；慢采集可能超过 Prometheus 默认 lookback，出现图表空档，需按原生时间语义设计查询。不要全局扩大 lookback 或补零掩盖缺数。
+
+改进后的面板在 [grafana/ufm_ib_quality.json](grafana/ufm_ib_quality.json)，示例规则在 [examples/telemetry-alerts.yml](examples/telemetry-alerts.yml)。`rate` / `increase` 的窗口需覆盖足够的源更新轮次；缓存重采样不是新的硬件测量。REST 缺口也不等于硬件故障台数，光功率阈值必须结合模块规格。
+
+## 验证与性能
+
+```sh
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+cargo build --locked
+# 可选变量须指向真实 Prometheus 二进制，CI 会实际执行该项。
+PROMETHEUS_BINARY=/path/to/prometheus python3 tests/integration.py target/debug/ufm-ib-exporter
+cargo build --locked --release
+python3 tools/benchmark.py --binary target/release/ufm-ib-exporter --input-mib 512
+```
+
+[压测方法与结果](docs/benchmark.md)提供合成数据下的 Rust/Python 对照；不是生产 UFM 负载或 XDR 设备兼容性验收。生产切换前须观察自然周期、原生观测时间、完整目标覆盖和 UFM 本机资源，保留旧实例的回退入口。

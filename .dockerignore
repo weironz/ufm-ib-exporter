@@ -1,0 +1,9 @@
+.git
+.env
+*.local.yaml
+config/
+target/
+artifacts/
+__pycache__/
+*.pyc
+*.log

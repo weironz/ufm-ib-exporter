@@ -7,22 +7,22 @@ groups:
         labels: { severity: critical }
         annotations:
           summary: "UFM 不可达(CX8 IB 链路状态无法采集)"
-          description: "UFM REST 连续 5 分钟抓取失败;期间 IB 链路指标回退 last-good,可能已陈旧(见 ufm_data_age_seconds)。"
+          description: "UFM REST 连续 5 分钟不可用或缓存已过期；期间不输出旧链路业务指标，见 ufm_data_age_seconds。"
 
       - alert: IBCx8LinkDown
-        expr: ufm_ib_link_up == 0 and on() ufm_up == 1
+        expr: ufm_ib_link_up == 0 and on(job, instance) ufm_up == 1
         for: 2m
         labels: { severity: critical }
         annotations:
           summary: "{{ $labels.node }} CX8 链路 down → {{ $labels.peer }} {{ $labels.cage }}"
           description: "UFM 报告该 CX8 端口 logical_state≠Active。node={{ $labels.node }} card={{ $labels.card }} peer={{ $labels.peer }} cage={{ $labels.cage }} speed={{ $labels.speed }}。"
 
-      # node_links_up<8 同时覆盖「端口直接 down」与「端口从 Fabric 整个消失」两种情况;
+      # 与配置中的基线比较，覆盖端口 down 或从 Fabric 消失;
       # 用 ufm_up==1 门控,避免 UFM 抖动回退 last-good 时按陈旧数据误报。
       - alert: IBCx8NodeDegraded
-        expr: ufm_ib_node_links_up < 8 and on() ufm_up == 1
+        expr: (ufm_ib_node_links_up < on(node, job, instance) ufm_ib_node_links_expected) and on(job, instance) ufm_up == 1
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: "{{ $labels.node }} CX8 在线链路不足 8 ({{ $value }}/8)"
-          description: "该节点 UFM 可见的 up 链路 < 8(含端口 down 或端口从 Fabric 消失)。"
+          summary: "{{ $labels.node }} CX8 在线链路低于配置基线（当前 {{ $value }}）"
+          description: "该节点可见的 up 链路低于 ufm_ib_node_links_expected；结合端口/节点使用状态核对，不直接等同硬件故障。"

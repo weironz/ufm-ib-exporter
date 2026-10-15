@@ -1,0 +1,41 @@
+rule_files:
+  - ../examples/telemetry-alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'rx_power_lane0{Port_Name="fixture",job="ufm",instance="local"}'
+        values: '1+0x35'
+      - series: 'ufm_telemetry_observed_at_seconds{Port_Name="fixture",job="ufm",instance="local",telemetry_source="9002"}'
+        values: '10+0x35'
+      - series: 'rx_power_lane0{Port_Name="missing-native-time",job="ufm",instance="local"}'
+        values: '2+0x35'
+    promql_expr_test:
+      - expr: optic:rx_power_min
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="optic:rx_power_min",Port_Name="fixture",job="ufm",instance="local"}'
+            value: 1
+      - expr: optic:rx_power_min
+        eval_time: 30m
+        exp_samples: []
+  - interval: 1m
+    input_series:
+      - series: 'LinkDownedCounterExtended{port="fixture",job="ufm",instance="local"}'
+        values: '4+0x35'
+      - series: 'ufm_telemetry_up{source="9001",job="ufm",instance="local"}'
+        values: '1+0x9 0+0x25'
+      - series: 'ufm_telemetry_successful_polls_total{source="9001",job="ufm",instance="local"}'
+        values: '1 1 2+0x33'
+    promql_expr_test:
+      - expr: '(count((increase(LinkDownedCounterExtended[1h]) > 0) and on(job, instance) (ufm_telemetry_up{source="9001"} == 1)) or vector(0)) and on() (max(ufm_telemetry_up{source="9001"} == 1) == 1) and on() (max(ufm_telemetry_successful_polls_total{source="9001"}) >= 2)'
+        eval_time: 1m
+        exp_samples: []
+      - expr: '(count((increase(LinkDownedCounterExtended[1h]) > 0) and on(job, instance) (ufm_telemetry_up{source="9001"} == 1)) or vector(0)) and on() (max(ufm_telemetry_up{source="9001"} == 1) == 1) and on() (max(ufm_telemetry_successful_polls_total{source="9001"}) >= 2)'
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+      - expr: '(count((increase(LinkDownedCounterExtended[1h]) > 0) and on(job, instance) (ufm_telemetry_up{source="9001"} == 1)) or vector(0)) and on() (max(ufm_telemetry_up{source="9001"} == 1) == 1) and on() (max(ufm_telemetry_successful_polls_total{source="9001"}) >= 2)'
+        eval_time: 15m
+        exp_samples: []

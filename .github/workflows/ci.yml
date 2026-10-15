@@ -1,0 +1,42 @@
+name: Rust exporter checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked
+      - name: Install a real Prometheus engine for integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=3.12.0
+          artifact="prometheus-${version}.linux-amd64.tar.gz"
+          base="https://github.com/prometheus/prometheus/releases/download/v${version}"
+          curl -fsSL "$base/$artifact" -o "$RUNNER_TEMP/$artifact"
+          curl -fsSL "$base/sha256sums.txt" -o "$RUNNER_TEMP/prometheus-sha256sums.txt"
+          cd "$RUNNER_TEMP"
+          awk -v artifact="$artifact" '$2 == artifact' prometheus-sha256sums.txt | sha256sum --check --strict
+          tar -xzf "$artifact"
+          echo "PROMETHEUS_BINARY=$RUNNER_TEMP/prometheus-${version}.linux-amd64/prometheus" >> "$GITHUB_ENV"
+          echo "PROMTOOL=$RUNNER_TEMP/prometheus-${version}.linux-amd64/promtool" >> "$GITHUB_ENV"
+      - run: $PROMTOOL check rules examples/alerts.yml examples/telemetry-alerts.yml
+      - run: $PROMTOOL test rules tests/telemetry-rules.test.yml
+      - run: python3 tests/integration.py target/debug/ufm-ib-exporter
+      - run: docker compose --env-file .env.example config --quiet
+      - run: docker compose --env-file .env.example -f docker-compose.ufm.yml config --quiet
+      - run: docker build -t ufm-ib-exporter:ci .
+      - run: docker run --rm --network none ufm-ib-exporter:ci --version
+      - name: Exercise the non-root read-only container with synthetic upstreams
+        run: UFM_TEST_DOCKER_IMAGE=ufm-ib-exporter:ci python3 tests/integration.py target/debug/ufm-ib-exporter

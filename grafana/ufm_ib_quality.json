@@ -48,7 +48,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(increase(LinkDownedCounterExtended[1h]) > 0) or vector(0)"
+          "expr": "(count((increase(LinkDownedCounterExtended[1h]) > 0) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)) or vector(0)) and on() (max(ufm_telemetry_up{source=\"9001\"} == 1) == 1) and on() (max(ufm_telemetry_successful_polls_total{source=\"9001\"}) >= 2)"
         }
       ],
       "fieldConfig": {
@@ -98,7 +98,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(increase(SymbolErrorCounterExtended[1h]) > 0) or vector(0)"
+          "expr": "(count((increase(SymbolErrorCounterExtended[1h]) > 0) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)) or vector(0)) and on() (max(ufm_telemetry_up{source=\"9001\"} == 1) == 1) and on() (max(ufm_telemetry_successful_polls_total{source=\"9001\"}) >= 2)"
         }
       ],
       "fieldConfig": {
@@ -178,7 +178,7 @@
     },
     {
       "type": "stat",
-      "title": "数据年龄(秒)",
+      "title": "最旧原生观测年龄（秒，9001）",
       "id": 5,
       "gridPos": {
         "h": 4,
@@ -193,7 +193,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "ufm_telemetry_data_age_seconds{source=\"9001\"}"
+          "expr": "max(time() - ufm_telemetry_observed_at_seconds{telemetry_source=\"9001\"})"
         }
       ],
       "fieldConfig": {
@@ -274,7 +274,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(25, increase(LinkDownedCounterExtended[1h]))",
+          "expr": "(topk(25, increase(LinkDownedCounterExtended[1h]))) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)",
           "instant": true,
           "format": "table"
         }
@@ -324,7 +324,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(25, increase(SymbolErrorCounterExtended[1h]))",
+          "expr": "(topk(25, increase(SymbolErrorCounterExtended[1h]))) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)",
           "instant": true,
           "format": "table"
         }
@@ -358,7 +358,7 @@
     },
     {
       "type": "timeseries",
-      "title": "FEC 纠错率(BER 代理,Top10 口) — 上升=光链路劣化",
+      "title": "FEC 纠错计数变化率（非显式 BER）",
       "id": 9,
       "gridPos": {
         "h": 8,
@@ -373,7 +373,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[5m]))",
+          "expr": "(topk(10, rate(phy_c_rs_fec_corrected_symbols_total_high[5m]))) and on(job, instance) (ufm_telemetry_up{source=\"9001\"} == 1)",
           "legendFormat": "{{host_name}} {{m_label}}"
         }
       ],
@@ -410,6 +410,106 @@
       "panels": []
     },
     {
+      "type": "stat",
+      "title": "光学采集状态（9002）",
+      "id": 15,
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ufm_telemetry_up{source=\"9002\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "正常",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "断",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "最旧原生观测年龄（秒，9002）",
+      "id": 16,
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(time() - ufm_telemetry_observed_at_seconds{telemetry_source=\"9002\"})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 240
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
       "id": 11,
       "type": "table",
       "title": "Rx 光功率最低 Top20 (在用口, mW) — 值在最左",
@@ -417,7 +517,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 28
       },
       "datasource": {
         "type": "prometheus",
@@ -546,7 +646,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 37
       },
       "datasource": {
         "type": "prometheus",
@@ -675,7 +775,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 46
       },
       "datasource": {
         "type": "prometheus",
@@ -688,7 +788,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "topk(20, dev_temperature > 5)",
+          "expr": "topk(20, (cable_temperature > 5) and on(job, instance) (ufm_telemetry_up{source=\"9002\"} == 1))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -716,16 +816,16 @@
               "instance": true
             },
             "renameByName": {
-              "node_description": "端口",
               "link_partner_description": "对端",
               "port_num": "port",
-              "Value": "温度(℃)"
+              "Value": "温度(℃)",
+              "Port_Name": "端口"
             },
             "indexByName": {
               "Value": 0,
-              "node_description": 1,
               "link_partner_description": 2,
-              "port_num": 3
+              "port_num": 3,
+              "Port_Name": 1
             }
           }
         }
@@ -804,7 +904,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 55
       },
       "datasource": {
         "type": "prometheus",
@@ -878,5 +978,5 @@
       }
     }
   ],
-  "version": 3
+  "version": 4
 }

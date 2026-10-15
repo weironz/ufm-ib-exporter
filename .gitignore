@@ -1,5 +1,8 @@
 # 凭据 / 本地配置
 .env
+*.local.yaml
+/target/
+/artifacts/
 
 # Python
 __pycache__/

@@ -1,0 +1,24 @@
+groups:
+  - name: ufm-telemetry
+    rules:
+      - alert: UFMTelemetrySourceUnavailable
+        expr: ufm_telemetry_up == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "UFM telemetry {{ $labels.source }} 数据不可用或已过期"
+      - record: optic:rx_power_min
+        expr: >-
+          min without (__name__) (
+            {__name__=~"rx_power_lane[0-7]"}
+            and ignoring (telemetry_source)
+            (time() - ufm_telemetry_observed_at_seconds{telemetry_source="9002"} < 1260)
+          )
+      - record: optic:tx_power_min
+        expr: >-
+          min without (__name__) (
+            {__name__=~"tx_power_lane[0-7]"}
+            and ignoring (telemetry_source)
+            (time() - ufm_telemetry_observed_at_seconds{telemetry_source="9002"} < 1260)
+          )
+      # Site configuration owns hardware thresholds; no external notification is enabled.
