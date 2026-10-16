@@ -17,9 +17,10 @@ services:
       - -remoteWrite.url=http://127.0.0.1:19091/api/v1/write
       - -remoteWrite.forcePromProto=true
       # Keep one relay slot available for existing device monitoring.
-      - -remoteWrite.queues=1
-      - -remoteWrite.maxRowsPerBlock=5000
+      - -remoteWrite.queues=${UFM_FORWARD_WORKERS:-1}
+      - -remoteWrite.maxRowsPerBlock=15000
       - -remoteWrite.maxBlockSize=8388608
+      - -remoteWrite.flushInterval=5s
       - -remoteWrite.tmpDataPath=/queue
       - -remoteWrite.maxDiskUsagePerURL=5GB
     volumes:

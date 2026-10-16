@@ -33,7 +33,8 @@ class ForwarderTest(unittest.TestCase):
             def do_GET(self):
                 # Larger than vmagent's default 16 MiB: small fixtures would hide
                 # the production cache-size regression even with healthy write ACKs.
-                body = b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\n' + (b'#' + b'x' * 1022 + b'\n') * 17408
+                rich = ''.join('ufm_forward_fixture{index="'+str(i)+'",'+','.join('p%02d="native-metadata-value"'%n for n in range(24))+'} 1\n' for i in range(4000)).encode()
+                body = rich + b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\n' + (b'#' + b'x' * 1022 + b'\n') * 17408
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
@@ -61,7 +62,7 @@ class ForwarderTest(unittest.TestCase):
                         f'-httpListenAddr=127.0.0.1:{agent_port}', f'-promscrape.config={root}/scrape.json',
                         f'-remoteWrite.url=http://127.0.0.1:{prom_port}/api/v1/write',
                         '-remoteWrite.forcePromProto=true', '-remoteWrite.queues=1',
-                        '-remoteWrite.maxRowsPerBlock=5000', '-remoteWrite.maxBlockSize=8388608',
+                        '-remoteWrite.maxRowsPerBlock=15000', '-remoteWrite.maxBlockSize=8388608', '-remoteWrite.flushInterval=5s',
                         f'-remoteWrite.tmpDataPath={root}/queue', '-remoteWrite.maxDiskUsagePerURL=64MB'], stdout=log, stderr=log))
                     time.sleep(2)
                     children.append(subprocess.Popen([prom,
@@ -82,6 +83,13 @@ class ForwarderTest(unittest.TestCase):
                         time.sleep(0.2)
                     self.assertEqual({r['metric']['ufm_source']: r['value'][1] for r in result}, {'9001': '1', '9002': '0'})
                     self.assertTrue(all('source' not in r['metric'] and 'device_id' not in r['metric'] for r in result))
+                    with http.open(f'http://127.0.0.1:{agent_port}/metrics', timeout=3) as r:
+                        metrics = r.read().decode()
+                    import re
+                    buckets = re.findall(r'vmagent_remotewrite_block_size_rows_bucket\{vmrange="([^.]*(?:\.[0-9]+)?e[+-][0-9]+)\.\.\.[^"]+"\} ([0-9]+)', metrics)
+                    self.assertTrue(any(float(low) >= 3000 and int(count) > 0 for low, count in buckets),
+                                    'Rich native labels must not force tiny WAN requests')
+
             finally:
                 for process in reversed(children):
                     process.terminate()

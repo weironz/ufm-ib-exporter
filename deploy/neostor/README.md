@@ -25,9 +25,13 @@ cp deploy/neostor/.env.example /srv/ufm-neostor/.env
 先以镜像的 `-dryRun -promscrape.config=/config/scrape.json` 验证暂存配置，再 `up -d`。
 新增 overlay 到现有 NeoStor 项目时还需更新该项目编排清单；本方案使用独立 project，避免 orphan 清理。
 
-队列独立持久化，上限 5 GB；1 个写入 worker，内部块预算 8 MiB、最多 5000 样本，
-适配中心的请求限制及 Agent 共享 relay 的并发限制。满队列仍可能丢弃，需观察积压/丢弃指标。
+队列独立持久化，上限 5 GB；1 个写入 worker，内部块预算 8 MiB、最多 15000 样本，
+低于中心单请求 20000 序列限制，发送并发也受 Agent relay 限制。
+vmagent 还按 `10 × maxRowsPerBlock` 个标签提前分块；UFM 丰富标签在过小配置下会生成大量小包。
+本配置以 15000 行预算、8 MiB 未压缩块上限和 5 秒 flush 形成较大批次，不降低数值精度或原采集周期。满队列仍可能丢弃，需观察积压/丢弃指标。
 relay 正忙时返回可重试的 503，两个发送器各自保留队列；需同时观察既有采集发送和新上行是否排空。
+默认 `UFM_FORWARD_WORKERS=1`，为既有设备监控保留 relay 槽位。初始化积压较大时可在
+同时观测既有发送队列的条件下临时设为 2；既有队列持续积压时应恢复 1，不能清队列。
 telemetry 启用流式解析，响应上限为 512 MiB；REST 上限为 8 MiB。默认 16 MiB
 抓取上限不足以容纳 UFM 过滤缓存，不能只增加 remote-write 块大小来处理这个问题。
 不要换 URL、清卷或反复创建新队列来隐藏失败。
