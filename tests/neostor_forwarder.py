@@ -34,11 +34,15 @@ class ForwarderTest(unittest.TestCase):
                 # Larger than vmagent's default 16 MiB: small fixtures would hide
                 # the production cache-size regression even with healthy write ACKs.
                 rich = ''.join('ufm_forward_fixture{index="'+str(i)+'",'+','.join('p%02d="native-metadata-value"'%n for n in range(24))+'} 1\n' for i in range(4000)).encode()
-                body = rich + b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\n' + (b'#' + b'x' * 1022 + b'\n') * 17408
+                body = rich + b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\nrx_power_lane0{port="fixture"} -2.5\nSymbolErrorCounter{port="fixture"} 42\ncustom_native_fixture{port="fixture",source="9002"} 7\n' + (b'#' + b'x' * 1022 + b'\n') * 17408
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    # A streaming client may be terminated during test cleanup.
+                    pass
             def log_message(self, *args):
                 pass
         source = ThreadingHTTPServer(('127.0.0.1', 0), Source)
@@ -49,10 +53,11 @@ class ForwarderTest(unittest.TestCase):
             prom_port, agent_port = port(), port()
             config = renderer.render('127.0.0.1:9627', '127.0.0.1:9628', 'fixture-idc')
             # Only synthetic inputs use fast polling and ephemeral ports.
-            config['scrape_configs'] = [config['scrape_configs'][1]]
-            job = config['scrape_configs'][0]
-            job.update(scrape_interval='1s', scrape_timeout='1s')
-            job['static_configs'][0]['targets'] = [f'127.0.0.1:{source.server_port}']
+            self.assertEqual([j['scrape_interval'] for j in config['scrape_configs']], ['60s', '180s', '600s'])
+            config['scrape_configs'] = config['scrape_configs'][1:]
+            for job in config['scrape_configs']:
+                job.update(scrape_interval='1s', scrape_timeout='1s')
+                job['static_configs'][0]['targets'] = [f'127.0.0.1:{source.server_port}']
             (root / 'scrape.json').write_text(json.dumps(config))
             (root / 'prom.json').write_text('{"scrape_configs":[]}')
             try:
@@ -83,6 +88,17 @@ class ForwarderTest(unittest.TestCase):
                         time.sleep(0.2)
                     self.assertEqual({r['metric']['ufm_source']: r['value'][1] for r in result}, {'9001': '1', '9002': '0'})
                     self.assertTrue(all('source' not in r['metric'] and 'device_id' not in r['metric'] for r in result))
+                    self.assertEqual({r['metric']['ufm_source']: r['metric']['job'] for r in result},
+                                     {'9001': 'ufm-telemetry', '9002': 'ufm-optics'})
+                    query = '{__name__=~"rx_power_lane0|SymbolErrorCounter|custom_native_fixture"}'
+                    with http.open(f'http://127.0.0.1:{prom_port}/api/v1/query?' + urllib.parse.urlencode({'query': query}), timeout=3) as r:
+                        business = json.load(r)['data']['result']
+                    self.assertEqual(len(business), 3, business)
+                    self.assertEqual({r['metric']['__name__']: (r['metric']['job'], r['value'][1]) for r in business}, {
+                        'rx_power_lane0': ('ufm-optics', '-2.5'),
+                        'SymbolErrorCounter': ('ufm-telemetry', '42'),
+                        'custom_native_fixture': ('ufm-telemetry', '7'),
+                    })
                     with http.open(f'http://127.0.0.1:{agent_port}/metrics', timeout=3) as r:
                         metrics = r.read().decode()
                     import re

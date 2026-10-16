@@ -16,6 +16,9 @@ def target(value, port):
     return value
 
 
+OPTICS = r'(rx_power_lane[0-7]|tx_power_lane[0-7]|cable_temperature)'
+
+
 def render(rest, telemetry, site):
     if not re.fullmatch(r'[a-z][a-z0-9-]{0,62}', site):
         raise ValueError('A stable IDC routing code is required')
@@ -23,18 +26,30 @@ def render(rest, telemetry, site):
     for name, endpoint, interval, timeout in [
         ('ufm-rest', target(rest, 9627), 60, 30),
         ('ufm-telemetry', target(telemetry, 9628), 180, 60),
+        ('ufm-optics', target(telemetry, 9628), 600, 60),
     ]:
         jobs.append({
             'job_name': name, 'scrape_interval': str(interval) + 's',
             'scrape_timeout': str(timeout) + 's', 'sample_limit': 500000,
             'max_scrape_size': '8MiB' if name == 'ufm-rest' else '512MiB',
-            'stream_parse': name == 'ufm-telemetry',
+            'stream_parse': name != 'ufm-rest',
             'honor_labels': False, 'honor_timestamps': True,
             'static_configs': [{'targets': [endpoint], 'labels': {
                 'cluster': site, 'host': 'ufm-fabric', 'device_type': 'ib_fabric',
                 'interval_secs': str(interval), 'integration': 'ufm-cache',
             }}],
-            'metric_relabel_configs': [
+            'metric_relabel_configs': (
+                # CableInfo refreshes every 600s. Send its complete default
+                # optical gauges once per native cycle instead of copying the
+                # same ~100MB cache on each 180s counter scrape. Unknown custom
+                # metric names remain in the counter job, never silently lost.
+                [{'action': 'keep', 'source_labels': ['__name__', 'source'],
+                  'regex': OPTICS + ';.*|ufm_.*;9002'}]
+                if name == 'ufm-optics' else
+                [{'action': 'drop', 'source_labels': ['__name__'], 'regex': OPTICS},
+                 {'action': 'drop', 'source_labels': ['__name__', 'source'], 'regex': 'ufm_.*;9002'}]
+                if name == 'ufm-telemetry' else []
+            ) + [
                 # The center reserves source="neostor". Preserve 9001/9002 before
                 # scoping, or these two diagnostics would become the same series.
                 {'source_labels': ['source'], 'regex': '(.+)', 'target_label': 'ufm_source'},
