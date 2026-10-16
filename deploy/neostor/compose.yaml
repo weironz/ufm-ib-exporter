@@ -1,0 +1,35 @@
+services:
+  ufm-forwarder:
+    image: victoriametrics/vmagent:v1.103.0@sha256:cc36d2a84be1edb8c9277ffaa1c27d9d268758bcf5554b21f14b225b226320a8
+    network_mode: host
+    user: "${UFM_FORWARD_UID:?}:${UFM_FORWARD_GID:?}"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 64
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    command:
+      - -httpListenAddr=127.0.0.1:19096
+      - -promscrape.config=/config/scrape.json
+      - -remoteWrite.url=http://127.0.0.1:19091/api/v1/write
+      - -remoteWrite.forcePromProto=true
+      # One connection leaves capacity for the existing Agent relay's other users.
+      - -remoteWrite.queues=1
+      - -remoteWrite.maxRowsPerBlock=5000
+      - -remoteWrite.maxBlockSize=1048576
+      - -remoteWrite.tmpDataPath=/queue
+      - -remoteWrite.maxDiskUsagePerURL=5GB
+    volumes:
+      - ${UFM_FORWARD_ROOT:?}/config:/config:ro
+      - ufm-queue:/queue
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+volumes:
+  ufm-queue:
+    # Created explicitly with the service UID before first startup; never cleared.
+    external: true
+    name: ${UFM_FORWARD_QUEUE:?}

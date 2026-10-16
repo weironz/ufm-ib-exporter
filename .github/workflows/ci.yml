@@ -41,6 +41,15 @@ jobs:
       - run: $PROMTOOL check rules examples/alerts.yml examples/telemetry-alerts.yml
       - run: $PROMTOOL test rules tests/telemetry-rules.test.yml
       - run: python3 tests/integration.py target/debug/ufm-ib-exporter
+      - name: Validate the optional NeoStor queue with real remote write
+        run: |
+          image=victoriametrics/vmagent:v1.103.0@sha256:cc36d2a84be1edb8c9277ffaa1c27d9d268758bcf5554b21f14b225b226320a8
+          container=$(docker create --network none "$image")
+          docker cp "$container:/vmagent-prod" "$RUNNER_TEMP/ufm-vmagent"
+          docker rm "$container"
+          chmod +x "$RUNNER_TEMP/ufm-vmagent"
+          VMAGENT_BINARY="$RUNNER_TEMP/ufm-vmagent" python3 tests/neostor_forwarder.py
+          docker compose --env-file deploy/neostor/.env.example -f deploy/neostor/compose.yaml config --quiet
       - run: docker compose --env-file .env.example config --quiet
         working-directory: deploy/docker-compose
       - run: docker compose --env-file .env.example -f docker-compose.telemetry.yml config --quiet

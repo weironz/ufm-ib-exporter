@@ -120,6 +120,9 @@ curl -fsS http://127.0.0.1:9627/metrics
 
 ## CI 发布
 
+需要把现有缓存上传 NeoStor 时，使用可选的 [独立上行队列](neostor/README.md)。
+它不修改 Agent 管理的采集配置，不增加 UFM 原生轮询；中心鉴权和 IDC 归属仍由已有 Agent 决定。
+
 推送版本标签（本次为 `v0.1.1`）后，CI 先执行格式、Clippy、单元/集成测试、真实 Prometheus 规则和容器验证，再构建两个架构的 musl 静态二进制。镜像直接使用这两个发布二进制，支持 `linux/amd64`、`linux/arm64`，不在 Docker Hub 构建另一份应用。
 
 Docker Hub 凭据使用仓库 Actions Secret：`DOCKERHUB_USERNAME`（可省略，默认 `willdockerhub`）和 `DOCKERHUB_TOKEN`；兼容 `DOCKERHUB_PASSWORD` 作为 token 的替代名称。Token 需允许写入 `willdockerhub/ufm-ib-exporter`。GitHub Release 使用工作流自带的 `GITHUB_TOKEN`，仅发布 job 获得 `contents: write`。
