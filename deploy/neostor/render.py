@@ -27,6 +27,8 @@ def render(rest, telemetry, site):
         jobs.append({
             'job_name': name, 'scrape_interval': str(interval) + 's',
             'scrape_timeout': str(timeout) + 's', 'sample_limit': 500000,
+            'max_scrape_size': '8MiB' if name == 'ufm-rest' else '512MiB',
+            'stream_parse': name == 'ufm-telemetry',
             'honor_labels': False, 'honor_timestamps': True,
             'static_configs': [{'targets': [endpoint], 'labels': {
                 'cluster': site, 'host': 'ufm-fabric', 'device_type': 'ib_fabric',

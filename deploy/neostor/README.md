@@ -27,6 +27,8 @@ cp deploy/neostor/.env.example /srv/ufm-neostor/.env
 
 队列独立持久化，上限 5 GB；1 个写入 worker，块最多 5000 样本 / 1 MiB，
 适配中心的请求限制及 Agent 共享 relay 的并发限制。满队列仍可能丢弃，需观察积压/丢弃指标。
+telemetry 启用流式解析，响应上限为 512 MiB；REST 上限为 8 MiB。默认 16 MiB
+抓取上限不足以容纳 UFM 过滤缓存，不能只增加 remote-write 块大小来处理这个问题。
 不要换 URL、清卷或反复创建新队列来隐藏失败。
 
 `ufm_source` 保存 exporter 的原始 `source` 标签，避免中心强制的

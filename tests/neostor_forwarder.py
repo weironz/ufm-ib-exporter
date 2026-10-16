@@ -31,7 +31,9 @@ class ForwarderTest(unittest.TestCase):
         vmagent = os.environ['VMAGENT_BINARY']
         class Source(BaseHTTPRequestHandler):
             def do_GET(self):
-                body = b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\n'
+                # Larger than vmagent's default 16 MiB: small fixtures would hide
+                # the production cache-size regression even with healthy write ACKs.
+                body = b'ufm_telemetry_up{source="9001"} 1\nufm_telemetry_up{source="9002"} 0\n' + (b'#' + b'x' * 1022 + b'\n') * 17408
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
