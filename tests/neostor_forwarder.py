@@ -61,7 +61,7 @@ class ForwarderTest(unittest.TestCase):
                         f'-httpListenAddr=127.0.0.1:{agent_port}', f'-promscrape.config={root}/scrape.json',
                         f'-remoteWrite.url=http://127.0.0.1:{prom_port}/api/v1/write',
                         '-remoteWrite.forcePromProto=true', '-remoteWrite.queues=1',
-                        '-remoteWrite.maxRowsPerBlock=5000', '-remoteWrite.maxBlockSize=1048576',
+                        '-remoteWrite.maxRowsPerBlock=5000', '-remoteWrite.maxBlockSize=4194304',
                         f'-remoteWrite.tmpDataPath={root}/queue', '-remoteWrite.maxDiskUsagePerURL=64MB'], stdout=log, stderr=log))
                     time.sleep(2)
                     children.append(subprocess.Popen([prom,

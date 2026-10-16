@@ -19,7 +19,7 @@ services:
       # One connection leaves capacity for the existing Agent relay's other users.
       - -remoteWrite.queues=1
       - -remoteWrite.maxRowsPerBlock=5000
-      - -remoteWrite.maxBlockSize=1048576
+      - -remoteWrite.maxBlockSize=4194304
       - -remoteWrite.tmpDataPath=/queue
       - -remoteWrite.maxDiskUsagePerURL=5GB
     volumes:
