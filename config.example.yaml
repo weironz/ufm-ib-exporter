@@ -16,6 +16,7 @@ rest:
   max_input_bytes: 16777216
   max_cache_bytes: 8388608
   node_prefix: B300
+  node_prefix_aliases: []  # Alternate input names with the same node number.
   expected_nodes: 32
   ports_per_node: 8
 

@@ -42,11 +42,13 @@ fn gauge(out: &mut String, name: &str, help: &str, value: usize) {
 
 pub fn parse(data: &[u8], config: &RestConfig) -> PollResult<Collected> {
     let ports: Vec<Port> = serde_json::from_slice(data).map_err(|_| PollError::Json)?;
-    let matcher = Regex::new(&format!(
-        "(?i)^{}-(\\d+)(?:$|[^0-9])",
-        regex::escape(&config.node_prefix)
-    ))
-    .map_err(|_| PollError::InvalidSample)?;
+    let prefixes = std::iter::once(&config.node_prefix)
+        .chain(&config.node_prefix_aliases)
+        .map(|prefix| regex::escape(prefix))
+        .collect::<Vec<_>>()
+        .join("|");
+    let matcher = Regex::new(&format!(r"(?i)^(?:{prefixes})-(\d+)(?:$|[^0-9])"))
+        .map_err(|_| PollError::InvalidSample)?;
     let mut links = String::new();
     let mut counts: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     let mut seen = HashSet::new();
@@ -216,6 +218,26 @@ mod tests {
         assert!(s.contains("ufm_ib_links_missing 15"));
         assert!(s.contains("ufm_ib_node_links_total{node=\"B300-01\"} 2"));
         assert!(!s.contains("plane0"));
+    }
+
+    #[test]
+    fn configured_aliases_preserve_canonical_labels() {
+        let data = br#"[
+          {"has_plane_ports":true,"node_description":"nova2-1:card0","logical_state":"Active"},
+          {"has_plane_ports":true,"node_description":"B300-01:card1","logical_state":"Active"},
+          {"has_plane_ports":true,"node_description":"other-1:card2","logical_state":"Active"}
+        ]"#;
+        let c = RestConfig {
+            expected_nodes: 1,
+            node_prefix_aliases: vec!["nova2".into()],
+            ..RestConfig::default()
+        };
+        let result = parse(data, &c).unwrap();
+        let text = std::str::from_utf8(&result.data).unwrap();
+        assert_eq!(text.matches("ufm_ib_link_up{").count(), 2);
+        assert!(text.contains("node=\"B300-01\",card=\"card0\""));
+        assert!(text.contains("node=\"B300-01\",card=\"card1\""));
+        assert!(!text.contains("nova2-"));
     }
 
     #[test]
