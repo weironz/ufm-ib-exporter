@@ -52,6 +52,8 @@ pub struct RestConfig {
     pub max_input_bytes: usize,
     pub max_cache_bytes: usize,
     pub node_prefix: String,
+    /// Other observed prefixes that use the same numeric node identifiers.
+    pub node_prefix_aliases: Vec<String>,
     pub expected_nodes: usize,
     pub ports_per_node: usize,
 }
@@ -69,6 +71,7 @@ impl Default for RestConfig {
             max_input_bytes: 16 * 1024 * 1024,
             max_cache_bytes: 8 * 1024 * 1024,
             node_prefix: "B300".into(),
+            node_prefix_aliases: Vec::new(),
             expected_nodes: 32,
             ports_per_node: 8,
         }
@@ -328,6 +331,12 @@ impl Config {
         );
         ensure!(
             !self.rest.node_prefix.is_empty()
+                && self.rest.node_prefix_aliases.len() <= 32
+                && self
+                    .rest
+                    .node_prefix_aliases
+                    .iter()
+                    .all(|s| !s.is_empty() && s.len() <= 128)
                 && self.rest.expected_nodes <= 100_000
                 && self.rest.ports_per_node <= 100_000,
             "invalid REST baseline"
